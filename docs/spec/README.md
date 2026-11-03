@@ -1,0 +1,25 @@
+# Relay Desk build spec
+
+Split from *Helpdesk & CRM Build Spec (Daktela-equivalent)*, 3 Nov 2026. This spec is the source of truth; section 19 overrides earlier sections.
+
+- [1. How to use this spec](01-how-to-use-this-spec.md)
+- [2. Purpose and scope](02-purpose-and-scope.md)
+- [3. Glossary](03-glossary.md)
+- [4. Users, roles and permissions](04-users-roles-and-permissions.md)
+- [5. Domain model](05-domain-model.md)
+- [6. Tickets module](06-tickets-module.md)
+- [7. Categories, statuses, custom fields and forms](07-categories-statuses-custom-fields-and-forms.md)
+- [8. SLA engine](08-sla-engine.md)
+- [9. Ticket distribution and assignment](09-ticket-distribution-and-assignment.md)
+- [10. Macros](10-macros.md)
+- [11. Email channel](11-email-channel.md)
+- [12. CRM](12-crm.md)
+- [13. Notifications, followers, mentions, presence](13-notifications-followers-mentions-presence.md)
+- [14. Search, filters, bulk operations, GDPR tools](14-search-filters-bulk-operations-gdpr-tools.md)
+- [15. Knowledge base](15-knowledge-base.md)
+- [16. External user portal](16-external-user-portal.md)
+- [17. History, audit and reporting](17-history-audit-and-reporting.md)
+- [18. Non-functional requirements](18-non-functional-requirements.md)
+- [19. Quality-of-life changes (owner to complete)](19-quality-of-life-changes-owner-to-complete.md)
+- [20. Build plan and acceptance criteria](20-build-plan-and-acceptance-criteria.md)
+- [21. Open questions and sources](21-open-questions-and-sources.md)
