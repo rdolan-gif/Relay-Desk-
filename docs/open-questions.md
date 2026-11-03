@@ -104,3 +104,9 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
     fine, or do you want inline "@name" autocomplete while typing?
 11. **Ticket categories and SLAs (Phase 4 prep).** What response and resolution times do you
     promise customers, per priority, and what are your working hours and holidays?
+12. **Email provider (Phase 3 blocker).** Are your support mailboxes on Microsoft 365, Google
+    Workspace or another provider (IMAP/SMTP)? Which addresses (e.g. support@, billing@), and
+    which category should each one feed? Microsoft 365 and Google need an app registration by
+    your IT admin; I'll provide step-by-step instructions.
+13. **Auto-responses and signatures (Phase 3).** Do you want an automatic "we've received your
+    email" reply, and what wording? One shared signature or one per agent/mailbox?
