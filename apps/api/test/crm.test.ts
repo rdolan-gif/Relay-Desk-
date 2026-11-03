@@ -429,7 +429,12 @@ describe('CRM (spec 7, 12, 14, 17)', () => {
     });
 
     it('search needs at least 3 characters', async () => {
-      expect((await admin.get('/api/search?q=sa')).body).toEqual({ contacts: [], accounts: [], records: [] });
+      expect((await admin.get('/api/search?q=sa')).body).toEqual({
+        tickets: [],
+        contacts: [],
+        accounts: [],
+        records: [],
+      });
       expect((await admin.get('/api/search?q=sam')).body.contacts.length).toBe(1);
     });
 

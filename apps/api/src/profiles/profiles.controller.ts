@@ -33,6 +33,21 @@ const rightsSchema = z.object({
   editableRightsProfiles: z.union([z.literal('all'), idList]).default([]),
   crmDatabases: z.union([z.literal('all'), idList]).default([]),
   crmRecordTypes: z.union([z.literal('all'), idList]).default([]),
+  categories: z
+    .union([
+      z.literal('all'),
+      z
+        .array(
+          z.object({
+            categoryId: z.string().uuid(),
+            access: z.boolean().default(true),
+            distributionLimit: z.number().int().min(1).max(1000).nullable().default(null),
+          }),
+        )
+        .max(1000),
+    ])
+    .default([]),
+  ticketViews: z.union([z.literal('all'), idList]).default([]),
 });
 
 @ApiTags('settings')

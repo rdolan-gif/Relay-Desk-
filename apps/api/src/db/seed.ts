@@ -11,7 +11,13 @@ import {
   crmRecords,
   customFields,
   rightsProfileCrmDatabases,
+  rightsProfileCategories,
   rightsProfiles,
+  categories,
+  categoryStatuses,
+  ticketStatuses,
+  ticketViews,
+  tickets,
   users,
 } from './schema';
 import type { FieldOption, FieldType, FormLayout } from '@relay-desk/domain';
@@ -79,6 +85,8 @@ export async function seed(db: Db, password = process.env.SEED_PASSWORD ?? DEFAU
       editAllRightsProfiles: true,
       allCrmDatabases: true,
       allCrmRecordTypes: true,
+      allCategories: true,
+      allTicketViews: true,
     },
     'Standard agent': {
       userVisibility: 'all' as const,
@@ -86,6 +94,8 @@ export async function seed(db: Db, password = process.env.SEED_PASSWORD ?? DEFAU
       editAllRightsProfiles: false,
       allCrmDatabases: false,
       allCrmRecordTypes: true,
+      allCategories: false,
+      allTicketViews: true,
     },
   };
   for (const [name, values] of Object.entries(rights)) {
@@ -138,7 +148,8 @@ export async function seed(db: Db, password = process.env.SEED_PASSWORD ?? DEFAU
     });
   }
   const crm = await seedCrm(db, rp['Standard agent']!);
-  return { accessProfiles: ap, rightsProfiles: rp, crm };
+  const helpdesk = await seedHelpdesk(db, rp['Standard agent']!, crm);
+  return { accessProfiles: ap, rightsProfiles: rp, crm, helpdesk };
 }
 
 /**
@@ -305,4 +316,113 @@ if (require.main === module) {
       process.exitCode = 1;
     })
     .finally(() => pool.end());
+}
+
+/**
+ * Helpdesk demo data: statuses, three categories (agents get Support and Billing with
+ * Access, and Intake without Access), two team views and a few tickets.
+ */
+async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<ReturnType<typeof seedCrm>>) {
+  const status = async (title: string, color: string) => {
+    const [existing] = await db.select().from(ticketStatuses).where(eq(ticketStatuses.title, title));
+    return existing?.id ?? (await db.insert(ticketStatuses).values({ title, color }).returning())[0]!.id;
+  };
+  const st = {
+    awaitingParts: await status('Awaiting parts', 'orange'),
+    refundIssued: await status('Refund issued', 'teal'),
+    resolved: await status('Resolved', 'green'),
+    duplicate: await status('Duplicate', 'gray'),
+  };
+  const category = async (title: string, values: Partial<typeof categories.$inferInsert>, statusIds: string[]) => {
+    const [existing] = await db
+      .select()
+      .from(categories)
+      .where(and(eq(categories.title, title), isNull(categories.deletedAt)));
+    if (existing) return existing.id;
+    const [row] = await db
+      .insert(categories)
+      .values({ title, ...values })
+      .returning();
+    if (statusIds.length)
+      await db.insert(categoryStatuses).values(statusIds.map((statusId) => ({ categoryId: row!.id, statusId })));
+    return row!.id;
+  };
+  const support = await category(
+    'Support',
+    {
+      groupName: 'Customer service',
+      statusRequired: 'on_close',
+      checkChildOnClose: true,
+      autoArchiveDays: 30,
+      defaultCrmDatabaseId: crm.customersDb,
+      formLayout: {
+        sections: [
+          {
+            id: 'ticket',
+            title: 'Ticket details',
+            fields: [{ fieldId: crm.fields.tier, readOnly: true, tooltip: 'From the customer record' }],
+          },
+        ],
+      },
+    },
+    [st.awaitingParts, st.resolved, st.duplicate],
+  );
+  const billing = await category(
+    'Billing',
+    {
+      groupName: 'Customer service',
+      waitingRequiresReopen: true,
+      multipleStatuses: true,
+      defaultCrmDatabaseId: crm.customersDb,
+    },
+    [st.refundIssued, st.resolved],
+  );
+  const intake = await category('Intake', { groupName: 'Back office' }, [st.resolved]);
+  for (const [categoryId, access, limit] of [
+    [support, true, 5],
+    [billing, true, null],
+    [intake, false, null],
+  ] as const) {
+    await db
+      .insert(rightsProfileCategories)
+      .values({ rightsProfileId: standardAgentRightsId, categoryId, access, distributionLimit: limit })
+      .onConflictDoNothing();
+  }
+
+  const view = async (
+    name: string,
+    conditions: { field: string; op: 'is' | 'empty' | 'not_empty' | 'is_not'; value?: string }[],
+  ) => {
+    const [existing] = await db
+      .select()
+      .from(ticketViews)
+      .where(and(eq(ticketViews.name, name), isNull(ticketViews.ownerUserId)));
+    return existing?.id ?? (await db.insert(ticketViews).values({ name, conditions }).returning())[0]!.id;
+  };
+  const myOpen = await view('My open tickets', [
+    { field: 'userId', op: 'is', value: '@me' },
+    { field: 'state', op: 'is', value: 'open' },
+  ]);
+  const unassigned = await view('Unassigned', [
+    { field: 'userId', op: 'empty' },
+    { field: 'state', op: 'is_not', value: 'archived' },
+  ]);
+
+  const [anyTicket] = await db.select({ id: tickets.id }).from(tickets).limit(1);
+  if (!anyTicket) {
+    const [sam] = await db.select().from(contacts).where(eq(contacts.name, 'Sam Smith'));
+    const [agent] = await db.select().from(users).where(eq(users.email, 'agent@relaydesk.local'));
+    await db.insert(tickets).values([
+      {
+        title: 'Printer jams on every second page',
+        categoryId: support,
+        contactId: sam?.id ?? null,
+        userId: agent?.id ?? null,
+        priority: 'high',
+      },
+      { title: 'Invoice 2026-114 charged twice', categoryId: billing, contactId: sam?.id ?? null, priority: 'normal' },
+      { title: 'New supplier onboarding form', categoryId: intake, priority: 'low' },
+    ]);
+  }
+  return { statuses: st, categories: { support, billing, intake }, views: { myOpen, unassigned } };
 }

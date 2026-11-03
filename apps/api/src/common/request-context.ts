@@ -1,10 +1,11 @@
 import type { Request } from 'express';
-import type { Principal, RightsProfile } from '@relay-desk/domain';
+import type { Principal, RightsProfile, TicketRights } from '@relay-desk/domain';
 
 /** Authenticated caller, attached to the request by the AuthGuard. */
 export interface AuthContext {
   principal: Principal;
   rights: RightsProfile;
+  ticketRights: TicketRights;
   user: { id: string; email: string; name: string; type: Principal['type'] };
   accessProfileId: string | null;
   rightsProfileId: string | null;

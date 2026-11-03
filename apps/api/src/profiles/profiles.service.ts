@@ -16,8 +16,11 @@ import type { AuthContext } from '../common/request-context';
 import { DB, type Db, type DbOrTx } from '../db/db';
 import {
   accessProfiles,
+  categories,
   crmDatabases,
   crmRecordTypes,
+  rightsProfileCategories,
+  rightsProfileTicketViews,
   rightsProfileCrmDatabases,
   rightsProfileCrmRecordTypes,
   rightsProfileEditableAccessProfiles,
@@ -44,6 +47,8 @@ export interface RightsProfileInput {
   editableRightsProfiles: 'all' | string[];
   crmDatabases: 'all' | string[];
   crmRecordTypes: 'all' | string[];
+  categories: 'all' | { categoryId: string; access: boolean; distributionLimit: number | null }[];
+  ticketViews: 'all' | string[];
 }
 
 const forbidden = (message: string, reason: string) => new ForbiddenException({ message, reason });
@@ -203,6 +208,8 @@ export class ProfilesService {
             editAllRightsProfiles: input.editableRightsProfiles === 'all',
             allCrmDatabases: input.crmDatabases === 'all',
             allCrmRecordTypes: input.crmRecordTypes === 'all',
+            allCategories: input.categories === 'all',
+            allTicketViews: input.ticketViews === 'all',
           })
           .returning();
         await this.writeRightsLinks(tx, row!.id, input);
@@ -239,6 +246,8 @@ export class ProfilesService {
             editAllRightsProfiles: input.editableRightsProfiles === 'all',
             allCrmDatabases: input.crmDatabases === 'all',
             allCrmRecordTypes: input.crmRecordTypes === 'all',
+            allCategories: input.categories === 'all',
+            allTicketViews: input.ticketViews === 'all',
             updatedAt: new Date(),
           })
           .where(eq(rightsProfiles.id, id))
@@ -317,6 +326,19 @@ export class ProfilesService {
     };
     checkScope('CRM databases', auth.rights.crmDatabases, input.crmDatabases);
     checkScope('CRM record types', auth.rights.crmRecordTypes, input.crmRecordTypes);
+    const myCategories =
+      auth.ticketRights.categories === 'all' ? 'all' : auth.ticketRights.categories.map((c) => c.categoryId);
+    checkScope(
+      'categories',
+      myCategories,
+      input.categories === 'all' ? 'all' : input.categories.map((c) => c.categoryId),
+    );
+    checkScope('team views', auth.ticketRights.ticketViews, input.ticketViews);
+    await this.assertExist(
+      categories,
+      input.categories === 'all' ? 'all' : input.categories.map((c) => c.categoryId),
+      'category',
+    );
     await this.assertExist(crmDatabases, input.crmDatabases, 'CRM database');
     await this.assertExist(crmRecordTypes, input.crmRecordTypes, 'CRM record type');
 
@@ -331,7 +353,8 @@ export class ProfilesService {
   }
 
   private async assertExist(
-    table: typeof accessProfiles | typeof rightsProfiles | typeof crmDatabases | typeof crmRecordTypes,
+    table:
+      typeof accessProfiles | typeof rightsProfiles | typeof crmDatabases | typeof crmRecordTypes | typeof categories,
     ids: 'all' | string[],
     label: string,
   ) {
@@ -356,6 +379,18 @@ export class ProfilesService {
         .where(eq(rightsProfileEditableRightsProfiles.rightsProfileId, id));
       await tx.delete(rightsProfileCrmDatabases).where(eq(rightsProfileCrmDatabases.rightsProfileId, id));
       await tx.delete(rightsProfileCrmRecordTypes).where(eq(rightsProfileCrmRecordTypes.rightsProfileId, id));
+      await tx.delete(rightsProfileCategories).where(eq(rightsProfileCategories.rightsProfileId, id));
+      await tx.delete(rightsProfileTicketViews).where(eq(rightsProfileTicketViews.rightsProfileId, id));
+    }
+    if (input.categories !== 'all' && input.categories.length) {
+      const seen = new Set<string>();
+      const rows = input.categories.filter((c) => !seen.has(c.categoryId) && seen.add(c.categoryId));
+      await tx.insert(rightsProfileCategories).values(rows.map((c) => ({ rightsProfileId: id, ...c })));
+    }
+    if (input.ticketViews !== 'all' && input.ticketViews.length) {
+      await tx
+        .insert(rightsProfileTicketViews)
+        .values([...new Set(input.ticketViews)].map((viewId) => ({ rightsProfileId: id, viewId })));
     }
     if (input.crmDatabases !== 'all' && input.crmDatabases.length) {
       await tx
@@ -393,6 +428,7 @@ export class ProfilesService {
 
   private async publicRights(row: typeof rightsProfiles.$inferSelect, tx: DbOrTx = this.db) {
     const rights = await this.permissions.loadRights(row.id, tx);
+    const tickets = await this.permissions.loadTicketRights(row.id, tx);
     return {
       id: row.id,
       name: row.name,
@@ -405,6 +441,11 @@ export class ProfilesService {
         rights?.editableRightsProfiles === 'all' ? 'all' : [...(rights?.editableRightsProfiles ?? [])].sort(),
       crmDatabases: rights?.crmDatabases === 'all' ? 'all' : [...(rights?.crmDatabases ?? [])].sort(),
       crmRecordTypes: rights?.crmRecordTypes === 'all' ? 'all' : [...(rights?.crmRecordTypes ?? [])].sort(),
+      categories:
+        tickets.categories === 'all'
+          ? 'all'
+          : [...tickets.categories].sort((a, b) => a.categoryId.localeCompare(b.categoryId)),
+      ticketViews: tickets.ticketViews === 'all' ? 'all' : [...tickets.ticketViews].sort(),
     };
   }
 }

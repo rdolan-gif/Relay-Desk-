@@ -1,0 +1,854 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { and, asc, desc, eq, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import {
+  applySaveRules,
+  automaticState,
+  canCreateInCategory,
+  canDeleteTicket,
+  canSeeCategory,
+  canSeeCrmDatabase,
+  canSeeUser,
+  diffFields,
+  flattenForHistory,
+  isResolved,
+  resolveState,
+  visibleCategoryIds,
+  wouldCreateCycle,
+  type CustomValues,
+  type FilterCondition,
+  type Priority,
+  type SaveSource,
+  type TicketFields,
+  type TicketState,
+} from '@relay-desk/domain';
+import type { AuthContext } from '../common/request-context';
+import { applyCustomInput, filterSql, likeTerm, pageOf, scopeSql, type ListQuery } from '../crm/crm-common';
+import { CustomFieldsService } from '../crm/custom-fields.service';
+import { formError } from '../crm/form-errors';
+import { DB, type Db, type DbOrTx } from '../db/db';
+import {
+  accounts,
+  activities,
+  categories,
+  contacts,
+  crmRecords,
+  ticketFavourites,
+  ticketFollowers,
+  tickets,
+  users,
+} from '../db/schema';
+import { HistoryService } from '../history/history.service';
+import { sanitizeRich } from './sanitize';
+import { TICKET_COLUMNS, ticketFilterFields } from './ticket-filters';
+import { TicketSettingsService } from './ticket-settings.service';
+
+export interface TicketInput {
+  title?: string;
+  description?: string;
+  categoryId?: string;
+  state?: TicketState;
+  priority?: Priority;
+  userId?: string | null;
+  contactId?: string | null;
+  statusIds?: string[];
+  parentId?: number | null;
+  deadline?: string | null;
+  reopenAt?: string | null;
+  followerIds?: string[];
+  customFields?: Record<string, unknown>;
+  /** Optimistic locking: the version the client edited (spec 13). */
+  version?: number;
+}
+
+type Row = typeof tickets.$inferSelect;
+
+const SORTS: Record<string, SQL> = {
+  id: sql`${tickets.id}`,
+  title: sql`lower(${tickets.title})`,
+  createdAt: sql`${tickets.createdAt}`,
+  lastActivityAt: sql`${tickets.lastActivityAt}`,
+  deadline: sql`${tickets.deadline}`,
+  priority: sql`array_position(array['low','normal','high'], ${tickets.priority})`,
+};
+
+const iso = (d: Date | null) => (d ? d.toISOString() : null);
+
+export function ticketFlat(t: Row, followerIds: string[]) {
+  return flattenForHistory(
+    {
+      title: t.title,
+      description: t.description,
+      categoryId: t.categoryId,
+      state: t.state,
+      priority: t.priority,
+      userId: t.userId,
+      contactId: t.contactId,
+      statusIds: [...t.statusIds].sort(),
+      parentId: t.parentId,
+      deadline: iso(t.deadline),
+      reopenAt: iso(t.reopenAt),
+      followerIds: [...followerIds].sort(),
+    },
+    t.customFields,
+  );
+}
+
+const fields = (t: Row): TicketFields => ({
+  title: t.title,
+  categoryId: t.categoryId,
+  state: t.state,
+  priority: t.priority,
+  userId: t.userId,
+  contactId: t.contactId,
+  statusIds: t.statusIds,
+  reopenAt: t.reopenAt,
+  parentId: t.parentId === null ? null : String(t.parentId),
+});
+
+@Injectable()
+export class TicketsService {
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    @Inject(HistoryService) private readonly history: HistoryService,
+    @Inject(CustomFieldsService) private readonly fieldsService: CustomFieldsService,
+    @Inject(TicketSettingsService) private readonly settings: TicketSettingsService,
+  ) {}
+
+  // ------------------------------------------------------------------ reading
+
+  /** Only tickets in categories where the caller has Access = Yes (spec 4). */
+  categoryScope(auth: AuthContext): SQL | undefined {
+    const ids = visibleCategoryIds(auth.ticketRights);
+    return scopeSql(tickets.categoryId, ids === 'all' ? { all: true } : { all: false, ids });
+  }
+
+  async list(auth: AuthContext, q: ListQuery, extraConditions: FilterCondition[] = []) {
+    const fieldMap = await this.fieldsService.map();
+    const defs = ticketFilterFields(fieldMap.values());
+    const where: (SQL | undefined)[] = [isNull(tickets.deletedAt), this.categoryScope(auth)];
+    if (q.q) where.push(this.searchSql(q.q));
+    const own = q.filter ? (JSON.parse(q.filter) as FilterCondition[]) : [];
+    const all = [...extraConditions, ...(Array.isArray(own) ? own : [])].map((c) =>
+      c.value === '@me' ? { ...c, value: auth.user.id } : c,
+    );
+    where.push(
+      ...filterSql(all.length ? JSON.stringify(all) : undefined, defs, TICKET_COLUMNS, sql`${tickets.customFields}`),
+    );
+    const cond = and(...where);
+    const sortCol = SORTS[q.sort ?? 'id'] ?? SORTS.id!;
+    const rows = await this.db
+      .select({
+        ticket: tickets,
+        categoryTitle: categories.title,
+        userName: users.name,
+        contactName: contacts.name,
+        contactDatabaseId: contacts.databaseId,
+      })
+      .from(tickets)
+      .innerJoin(categories, eq(categories.id, tickets.categoryId))
+      .leftJoin(users, eq(users.id, tickets.userId))
+      .leftJoin(contacts, eq(contacts.id, tickets.contactId))
+      .where(cond)
+      .orderBy(q.dir === 'asc' ? asc(sortCol) : desc(sortCol), desc(tickets.id))
+      .limit(q.pageSize)
+      .offset((q.page - 1) * q.pageSize);
+    const [{ total }] = (await this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(tickets)
+      .where(cond)) as [{ total: number }];
+    return pageOf(
+      rows.map((r) => ({
+        ...publicTicket(r.ticket),
+        categoryTitle: r.categoryTitle,
+        userName: r.userName,
+        contactName: r.contactDatabaseId && canSeeCrmDatabase(auth.rights, r.contactDatabaseId) ? r.contactName : null,
+      })),
+      total,
+      q,
+    );
+  }
+
+  /** Title, description, comment text, or the ticket number ("123" or "#123"). */
+  searchSql(term: string): SQL {
+    const like = likeTerm(term);
+    const parts: SQL[] = [
+      sql`${tickets.title} ilike ${like}`,
+      sql`${tickets.description} ilike ${like}`,
+      sql`exists (select 1 from activities a where a.ticket_id = ${tickets.id} and a.deleted_at is null and a.body_html ilike ${like})`,
+    ];
+    const num = term.replace(/^#/, '');
+    if (/^\d{1,9}$/.test(num)) parts.push(sql`${tickets.id} = ${Number(num)}`);
+    return or(...parts)!;
+  }
+
+  /** The ticket if visible to the caller, else 404. */
+  async find(auth: AuthContext, id: number, tx: DbOrTx = this.db): Promise<Row> {
+    const [row] = await tx
+      .select()
+      .from(tickets)
+      .where(and(eq(tickets.id, id), isNull(tickets.deletedAt)));
+    if (!row || !canSeeCategory(auth.ticketRights, row.categoryId)) throw new NotFoundException();
+    return row;
+  }
+
+  async get(auth: AuthContext, id: number) {
+    const t = await this.find(auth, id);
+    const category = await this.settings.getCategory(auth, t.categoryId);
+    const followerRows = await this.db
+      .select({ id: users.id, name: users.name })
+      .from(ticketFollowers)
+      .innerJoin(users, eq(users.id, ticketFollowers.userId))
+      .where(eq(ticketFollowers.ticketId, id));
+    const [fav] = await this.db
+      .select()
+      .from(ticketFavourites)
+      .where(and(eq(ticketFavourites.ticketId, id), eq(ticketFavourites.userId, auth.user.id)));
+    const [owner] = t.userId
+      ? await this.db
+          .select({ id: users.id, name: users.name, isActive: users.isActive })
+          .from(users)
+          .where(eq(users.id, t.userId))
+      : [];
+    const children = await this.db
+      .select({ id: tickets.id, title: tickets.title, state: tickets.state, categoryId: tickets.categoryId })
+      .from(tickets)
+      .where(and(eq(tickets.parentId, id), isNull(tickets.deletedAt)))
+      .orderBy(asc(tickets.id));
+    const parent = t.parentId
+      ? await this.db
+          .select({ id: tickets.id, title: tickets.title, categoryId: tickets.categoryId })
+          .from(tickets)
+          .where(eq(tickets.id, t.parentId))
+      : [];
+    return {
+      ...publicTicket(t),
+      category: {
+        id: category.id,
+        title: category.title,
+        allowExternalComments: category.allowExternalComments,
+        autofocusTab: category.autofocusTab,
+      },
+      user: owner ?? null,
+      followers: followerRows,
+      isFavourite: !!fav,
+      parent:
+        parent[0] && canSeeCategory(auth.ticketRights, parent[0].categoryId)
+          ? { id: parent[0].id, title: parent[0].title }
+          : null,
+      children: children
+        .filter((c) => canSeeCategory(auth.ticketRights, c.categoryId))
+        .map(({ categoryId: _c, ...c }) => c),
+      contactCard: await this.contactCard(auth, t),
+    };
+  }
+
+  /** Compact contact card (spec 12.5): name, account, counts and other open tickets. */
+  private async contactCard(auth: AuthContext, t: Row) {
+    if (!t.contactId) return null;
+    const [c] = await this.db.select().from(contacts).where(eq(contacts.id, t.contactId));
+    if (!c || !canSeeCrmDatabase(auth.rights, c.databaseId)) return null;
+    const [account] = c.accountId
+      ? await this.db
+          .select({ id: accounts.id, name: accounts.name })
+          .from(accounts)
+          .where(eq(accounts.id, c.accountId))
+      : [];
+    const other = await this.db
+      .select({ id: tickets.id, title: tickets.title, state: tickets.state })
+      .from(tickets)
+      .where(
+        and(
+          eq(tickets.contactId, c.id),
+          ne(tickets.id, t.id),
+          inArray(tickets.state, ['open', 'waiting']),
+          isNull(tickets.deletedAt),
+          this.categoryScope(auth),
+        ),
+      )
+      .orderBy(desc(tickets.id))
+      .limit(10);
+    const [records] = (await this.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(crmRecords)
+      .where(and(eq(crmRecords.contactId, c.id), eq(crmRecords.stage, 'open'), isNull(crmRecords.deletedAt)))) as [
+      { n: number },
+    ];
+    return {
+      id: c.id,
+      name: c.name,
+      emails: c.emails,
+      phones: c.phones,
+      account: account ?? null,
+      otherOpenTickets: other,
+      openRecordCount: records.n,
+    };
+  }
+
+  async historyOf(auth: AuthContext, id: number) {
+    await this.find(auth, id);
+    return this.history.list('ticket', id);
+  }
+
+  async snapshot(auth: AuthContext, id: number, at: Date) {
+    const t = await this.find(auth, id);
+    const snap = await this.history.snapshot('ticket', String(id), ticketFlat(t, await this.followerIds(id)), at);
+    if (!snap)
+      throw new NotFoundException({ message: 'The ticket did not exist at that time.', reason: 'not_yet_created' });
+    return { at: at.toISOString(), ...snap.core, customFields: snap.custom };
+  }
+
+  async followerIds(ticketId: number, tx: DbOrTx = this.db): Promise<string[]> {
+    return (
+      await tx
+        .select({ id: ticketFollowers.userId })
+        .from(ticketFollowers)
+        .where(eq(ticketFollowers.ticketId, ticketId))
+    ).map((r) => r.id);
+  }
+
+  // ------------------------------------------------------------------ writing
+
+  /**
+   * Creates a ticket. The caller needs the category in their rights; with Access = No
+   * the ticket is created but `visible` is false and it cannot be opened (spec 4).
+   */
+  async create(
+    auth: AuthContext,
+    input: TicketInput & { title: string; categoryId: string },
+    source: SaveSource = 'form',
+  ) {
+    if (!canCreateInCategory(auth.ticketRights, input.categoryId)) {
+      throw new NotFoundException({ message: 'Unknown category.', reason: 'unknown_category' });
+    }
+    const category = await this.settings.findCategory(input.categoryId);
+    const after: TicketFields = {
+      title: input.title,
+      categoryId: input.categoryId,
+      state: input.state ?? 'open',
+      priority: input.priority ?? 'normal',
+      userId: input.userId ?? null,
+      contactId: input.contactId ?? null,
+      statusIds: input.statusIds ?? [],
+      reopenAt: input.reopenAt ? new Date(input.reopenAt) : null,
+      parentId: input.parentId ? String(input.parentId) : null,
+    };
+    const result = applySaveRules(
+      null,
+      after,
+      { ...category, allowedStatusIds: await this.settings.allowedStatusIds(category.id) },
+      {
+        source,
+        actorId: auth.user.id,
+        ownerDeactivated: false,
+        childStates: [],
+        userSetExplicitly: input.userId !== undefined,
+        now: new Date(),
+      },
+    );
+    if (!result.ok)
+      throw formError(result.errors.map((e) => ({ fieldId: e.field, code: e.code, message: e.message })) as never);
+    const t = result.ticket;
+    await this.checkRefs(auth, t, null);
+    if (t.parentId) await this.find(auth, Number(t.parentId));
+    const customFields = await applyCustomInput({
+      db: this.db,
+      auth,
+      layout: category.formLayout,
+      fields: await this.fieldsService.map(),
+      current: {},
+      input: input.customFields,
+      isCreate: true,
+    });
+    const followers = await this.validFollowers(auth, input.followerIds ?? []);
+    const id = await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(tickets)
+        .values({
+          title: t.title.trim(),
+          description: sanitizeRich(input.description ?? ''),
+          categoryId: t.categoryId,
+          state: t.state,
+          priority: t.priority,
+          userId: t.userId,
+          contactId: t.contactId,
+          statusIds: t.statusIds,
+          parentId: t.parentId ? Number(t.parentId) : null,
+          deadline: input.deadline ? new Date(input.deadline) : null,
+          reopenAt: t.reopenAt,
+          closedAt: isResolved(t.state) ? new Date() : null,
+          customFields,
+          createdById: auth.user.id,
+        })
+        .returning();
+      if (followers.length)
+        await tx.insert(ticketFollowers).values(followers.map((userId) => ({ ticketId: row!.id, userId })));
+      await this.history.record(tx, auth, 'ticket', row!.id, 'create', diffFields({}, ticketFlat(row!, followers)));
+      return row!.id;
+    });
+    const visible = canSeeCategory(auth.ticketRights, t.categoryId);
+    return visible ? { ...(await this.get(auth, id)), visible } : { id, visible };
+  }
+
+  /**
+   * Saves changes through the domain save rules. `source` decides which automatic rules
+   * apply (e.g. auto-fill User on close only from the form). A manual state wins over
+   * automation; version mismatch → 409 (optimistic locking).
+   */
+  async update(auth: AuthContext, id: number, input: TicketInput, source: SaveSource = 'form') {
+    const before = await this.find(auth, id);
+    if (input.version !== undefined && input.version !== before.version) {
+      throw new ConflictException({
+        message: 'Someone else saved this ticket. Reload to see their changes.',
+        reason: 'version_conflict',
+        current: publicTicket(before),
+      });
+    }
+    const categoryId = input.categoryId ?? before.categoryId;
+    if (categoryId !== before.categoryId && !canCreateInCategory(auth.ticketRights, categoryId)) {
+      throw new NotFoundException({ message: 'Unknown category.', reason: 'unknown_category' });
+    }
+    const category = await this.settings.findCategory(categoryId);
+    const [owner] = before.userId
+      ? await this.db.select({ isActive: users.isActive }).from(users).where(eq(users.id, before.userId))
+      : [];
+    const childStates = (
+      await this.db
+        .select({ state: tickets.state })
+        .from(tickets)
+        .where(and(eq(tickets.parentId, id), isNull(tickets.deletedAt)))
+    ).map((r) => r.state);
+
+    const after: TicketFields = {
+      title: input.title ?? before.title,
+      categoryId,
+      state: input.state ?? before.state,
+      priority: input.priority ?? before.priority,
+      userId: input.userId !== undefined ? input.userId : before.userId,
+      contactId: input.contactId !== undefined ? input.contactId : before.contactId,
+      statusIds: input.statusIds ?? before.statusIds,
+      reopenAt: input.reopenAt !== undefined ? (input.reopenAt ? new Date(input.reopenAt) : null) : before.reopenAt,
+      parentId:
+        input.parentId !== undefined
+          ? input.parentId === null
+            ? null
+            : String(input.parentId)
+          : before.parentId === null
+            ? null
+            : String(before.parentId),
+    };
+    const result = applySaveRules(
+      fields(before),
+      after,
+      { ...category, allowedStatusIds: await this.settings.allowedStatusIds(category.id) },
+      {
+        source,
+        actorId: auth.user.id,
+        ownerDeactivated: owner ? !owner.isActive : false,
+        childStates,
+        userSetExplicitly: input.userId !== undefined && input.userId !== before.userId,
+        now: new Date(),
+      },
+    );
+    if (!result.ok)
+      throw formError(result.errors.map((e) => ({ fieldId: e.field, code: e.code, message: e.message })) as never);
+    const t = result.ticket;
+    await this.checkRefs(auth, t, before);
+    if (t.parentId !== (before.parentId === null ? null : String(before.parentId)))
+      await this.checkParent(auth, id, t.parentId);
+    const customFields = await applyCustomInput({
+      db: this.db,
+      auth,
+      layout: category.formLayout,
+      fields: await this.fieldsService.map(),
+      current: before.customFields as CustomValues,
+      input: input.customFields,
+      isCreate: false,
+    });
+    const beforeFollowers = await this.followerIds(id);
+    const followers = input.followerIds ? await this.validFollowers(auth, input.followerIds) : beforeFollowers;
+
+    await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(tickets)
+        .set({
+          title: t.title.trim(),
+          description: input.description !== undefined ? sanitizeRich(input.description) : before.description,
+          categoryId: t.categoryId,
+          state: t.state,
+          priority: t.priority,
+          userId: t.userId,
+          contactId: t.contactId,
+          statusIds: t.statusIds,
+          parentId: t.parentId ? Number(t.parentId) : null,
+          deadline: input.deadline !== undefined ? (input.deadline ? new Date(input.deadline) : null) : before.deadline,
+          reopenAt: t.reopenAt,
+          closedAt: closedAtFor(before, t.state),
+          customFields,
+          version: before.version + 1,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(tickets.id, id), eq(tickets.version, before.version)))
+        .returning();
+      if (!row)
+        throw new ConflictException({
+          message: 'Someone else saved this ticket. Reload to see their changes.',
+          reason: 'version_conflict',
+        });
+      if (input.followerIds) await this.replaceFollowers(tx, id, followers);
+      await this.history.record(
+        tx,
+        auth,
+        'ticket',
+        id,
+        'update',
+        diffFields(ticketFlat(before, beforeFollowers), ticketFlat(row, followers)),
+      );
+    });
+    return this.getOrHidden(auth, id);
+  }
+
+  /** After moving a ticket to a category without Access, the caller may no longer see it. */
+  private async getOrHidden(auth: AuthContext, id: number) {
+    const [row] = await this.db.select({ categoryId: tickets.categoryId }).from(tickets).where(eq(tickets.id, id));
+    return row && canSeeCategory(auth.ticketRights, row.categoryId)
+      ? { ...(await this.get(auth, id)), visible: true }
+      : { id, visible: false };
+  }
+
+  /** Bulk edit (spec 14): per-ticket save with source 'bulk'; failures are reported, not fatal. */
+  async bulkEdit(
+    auth: AuthContext,
+    ids: number[],
+    changes: Omit<TicketInput, 'version' | 'customFields' | 'followerIds'>,
+  ) {
+    const updated: number[] = [];
+    const failed: { id: number; message: string }[] = [];
+    for (const id of ids) {
+      try {
+        await this.update(auth, id, changes, 'bulk');
+        updated.push(id);
+      } catch (err) {
+        failed.push({
+          id,
+          message:
+            err instanceof Error
+              ? ((err as { response?: { message?: string } }).response?.message ?? err.message)
+              : String(err),
+        });
+      }
+    }
+    return { updated, failed };
+  }
+
+  async remove(auth: AuthContext, id: number) {
+    const t = await this.find(auth, id);
+    const category = await this.settings.findCategory(t.categoryId);
+    const childStates = (
+      await this.db
+        .select({ state: tickets.state })
+        .from(tickets)
+        .where(and(eq(tickets.parentId, id), isNull(tickets.deletedAt)))
+    ).map((r) => r.state);
+    if (!canDeleteTicket(category, childStates)) {
+      throw new ConflictException({ message: 'Close or archive all child tickets first.', reason: 'open_children' });
+    }
+    await this.db.transaction(async (tx) => {
+      await tx.update(tickets).set({ deletedAt: new Date() }).where(eq(tickets.id, id));
+      await this.history.record(tx, auth, 'ticket', id, 'delete', []);
+    });
+  }
+
+  async setFollowing(auth: AuthContext, id: number, follow: boolean) {
+    await this.find(auth, id);
+    await this.db.transaction(async (tx) => {
+      const before = await this.followerIds(id, tx);
+      if (follow) await tx.insert(ticketFollowers).values({ ticketId: id, userId: auth.user.id }).onConflictDoNothing();
+      else
+        await tx
+          .delete(ticketFollowers)
+          .where(and(eq(ticketFollowers.ticketId, id), eq(ticketFollowers.userId, auth.user.id)));
+      const after = await this.followerIds(id, tx);
+      await this.history.record(
+        tx,
+        auth,
+        'ticket',
+        id,
+        'update',
+        diffFields({ followerIds: before.sort() }, { followerIds: after.sort() }),
+      );
+    });
+  }
+
+  async setFavourite(auth: AuthContext, id: number, favourite: boolean) {
+    await this.find(auth, id);
+    if (favourite)
+      await this.db.insert(ticketFavourites).values({ ticketId: id, userId: auth.user.id }).onConflictDoNothing();
+    else
+      await this.db
+        .delete(ticketFavourites)
+        .where(and(eq(ticketFavourites.ticketId, id), eq(ticketFavourites.userId, auth.user.id)));
+  }
+
+  /**
+   * Merge (spec 6.4): activities and followers move to the survivor; the others are
+   * archived with a link to it; history is written on every ticket involved.
+   */
+  async merge(auth: AuthContext, ticketIds: number[], survivorId: number) {
+    const ids = [...new Set(ticketIds)];
+    if (ids.length < 2 || !ids.includes(survivorId)) {
+      throw new BadRequestException({
+        message: 'Choose at least two tickets and which one survives.',
+        reason: 'invalid_merge',
+      });
+    }
+    const rows = await Promise.all(ids.map((id) => this.find(auth, id)));
+    const merged = rows.filter((r) => r.id !== survivorId);
+    if (merged.some((r) => r.mergedIntoId !== null))
+      throw new ConflictException({ message: 'A ticket was already merged.', reason: 'already_merged' });
+    await this.db.transaction(async (tx) => {
+      const survivorFollowers = await this.followerIds(survivorId, tx);
+      const moved: string[] = [];
+      for (const m of merged) {
+        const acts = await tx
+          .update(activities)
+          .set({ ticketId: survivorId })
+          .where(eq(activities.ticketId, m.id))
+          .returning({ id: activities.id });
+        moved.push(...acts.map((a) => a.id));
+        const theirFollowers = await this.followerIds(m.id, tx);
+        for (const userId of theirFollowers)
+          await tx.insert(ticketFollowers).values({ ticketId: survivorId, userId }).onConflictDoNothing();
+        await tx
+          .update(tickets)
+          .set({
+            state: 'archived',
+            mergedIntoId: survivorId,
+            closedAt: m.closedAt ?? new Date(),
+            version: m.version + 1,
+            updatedAt: new Date(),
+          })
+          .where(eq(tickets.id, m.id));
+        await this.history.record(tx, auth, 'ticket', m.id, 'merge', [
+          { field: 'mergedIntoId', old: null, new: survivorId },
+          ...(m.state !== 'archived' ? [{ field: 'state', old: m.state, new: 'archived' }] : []),
+        ]);
+      }
+      const afterFollowers = await this.followerIds(survivorId, tx);
+      await tx
+        .update(tickets)
+        .set({ lastActivityAt: new Date(), updatedAt: new Date() })
+        .where(eq(tickets.id, survivorId));
+      await this.history.record(tx, auth, 'ticket', survivorId, 'merge', [
+        { field: 'mergedTicketIds', old: null, new: merged.map((m) => m.id) },
+        ...(moved.length ? [{ field: 'activities', old: null, new: moved.length }] : []),
+        ...diffFields({ followerIds: survivorFollowers.sort() }, { followerIds: afterFollowers.sort() }),
+      ]);
+    });
+    return this.get(auth, survivorId);
+  }
+
+  /** Child ticket from a ticket or one of its activities: copies the contact (spec 6.4). */
+  async createChild(
+    auth: AuthContext,
+    parentId: number,
+    input: { title: string; categoryId?: string; activityId?: string },
+  ) {
+    const parent = await this.find(auth, parentId);
+    let description = '';
+    if (input.activityId) {
+      const [act] = await this.db
+        .select()
+        .from(activities)
+        .where(and(eq(activities.id, input.activityId), eq(activities.ticketId, parentId)));
+      if (!act) throw new NotFoundException({ message: 'Unknown activity.', reason: 'unknown_activity' });
+      description = act.bodyHtml;
+    }
+    const created = await this.create(auth, {
+      title: input.title,
+      categoryId: input.categoryId ?? parent.categoryId,
+      contactId: parent.contactId,
+      parentId,
+      description,
+    });
+    if (input.activityId) {
+      await this.db.update(tickets).set({ sourceActivityId: input.activityId }).where(eq(tickets.id, created.id));
+    }
+    return created;
+  }
+
+  /** Scheduled: Waiting/Closed tickets whose re-open time has passed become Open (spec 6.3). */
+  async reopenDue(now = new Date()): Promise<number[]> {
+    const due = await this.db
+      .select()
+      .from(tickets)
+      .where(
+        and(
+          isNull(tickets.deletedAt),
+          inArray(tickets.state, ['waiting', 'closed']),
+          sql`${tickets.reopenAt} <= ${now}`,
+        ),
+      );
+    const done: number[] = [];
+    for (const t of due) {
+      const next = automaticState({ state: t.state, userId: t.userId }, { type: 'reopen_time_reached' });
+      if (!next) continue;
+      await this.db.transaction(async (tx) => {
+        await tx
+          .update(tickets)
+          .set({ state: next, reopenAt: null, closedAt: null, version: t.version + 1, updatedAt: now })
+          .where(eq(tickets.id, t.id));
+        await this.history.record(tx, null, 'ticket', t.id, 'update', [
+          { field: 'state', old: t.state, new: next },
+          { field: 'reopenAt', old: iso(t.reopenAt), new: null },
+        ]);
+      });
+      done.push(t.id);
+    }
+    return done;
+  }
+
+  /** Scheduled: archive tickets Closed for the category's auto-archive days (spec 6.3). */
+  async autoArchive(now = new Date()): Promise<number[]> {
+    const due = await this.db
+      .select({ id: tickets.id, version: tickets.version })
+      .from(tickets)
+      .innerJoin(categories, eq(categories.id, tickets.categoryId))
+      .where(
+        and(
+          isNull(tickets.deletedAt),
+          eq(tickets.state, 'closed'),
+          sql`${categories.autoArchiveDays} is not null`,
+          sql`${tickets.closedAt} <= ${now}::timestamptz - make_interval(days => ${categories.autoArchiveDays})`,
+        ),
+      );
+    for (const t of due) {
+      await this.db.transaction(async (tx) => {
+        await tx
+          .update(tickets)
+          .set({ state: 'archived', version: t.version + 1, updatedAt: now })
+          .where(eq(tickets.id, t.id));
+        await this.history.record(tx, null, 'ticket', t.id, 'update', [
+          { field: 'state', old: 'closed', new: 'archived' },
+        ]);
+      });
+    }
+    return due.map((t) => t.id);
+  }
+
+  /**
+   * Applies an automatic state change from an event (comments now; emails etc. later)
+   * inside the caller's transaction. A manual state in the same save wins (spec 6.3).
+   */
+  async applyAutomaticState(tx: DbOrTx, auth: AuthContext | null, t: Row, next: 'open' | null, manual?: TicketState) {
+    const state = resolveState(t.state, manual, next);
+    if (state === t.state) return t.state;
+    await tx
+      .update(tickets)
+      .set({ state, closedAt: closedAtFor(t, state), version: t.version + 1, updatedAt: new Date() })
+      .where(eq(tickets.id, t.id));
+    await this.history.record(tx, auth, 'ticket', t.id, 'update', [{ field: 'state', old: t.state, new: state }]);
+    return state;
+  }
+
+  async addFollowers(tx: DbOrTx, ticketId: number, userIds: string[]) {
+    for (const userId of userIds) await tx.insert(ticketFollowers).values({ ticketId, userId }).onConflictDoNothing();
+  }
+
+  // ------------------------------------------------------------------ helpers
+
+  private async replaceFollowers(tx: DbOrTx, id: number, ids: string[]) {
+    await tx.delete(ticketFollowers).where(eq(ticketFollowers.ticketId, id));
+    if (ids.length) await tx.insert(ticketFollowers).values(ids.map((userId) => ({ ticketId: id, userId })));
+  }
+
+  /** Followers must be active internal users visible to the caller (never external users). */
+  async validFollowers(auth: AuthContext, ids: string[]): Promise<string[]> {
+    const unique = [...new Set(ids)];
+    if (!unique.length) return [];
+    const rows = await this.db
+      .select()
+      .from(users)
+      .where(and(inArray(users.id, unique), isNull(users.deletedAt)));
+    const ok = rows.filter((u) => u.isActive && u.type !== 'external' && canSeeUser(auth.rights, auth.user.id, u.id));
+    if (ok.length !== unique.length) throw formError(['A follower is not a user you can see.']);
+    return unique;
+  }
+
+  /** The User must be visible and active; the contact must be in a visible CRM database. */
+  private async checkRefs(auth: AuthContext, t: TicketFields, before: Row | null) {
+    if (t.userId && t.userId !== before?.userId) {
+      const [u] = await this.db
+        .select()
+        .from(users)
+        .where(and(eq(users.id, t.userId), isNull(users.deletedAt)));
+      if (!u || !u.isActive || u.type === 'external' || !canSeeUser(auth.rights, auth.user.id, u.id)) {
+        throw formError([{ fieldId: 'userId', code: 'invalid', message: 'Unknown user.' }] as never);
+      }
+    }
+    if (t.contactId && t.contactId !== before?.contactId) {
+      const [c] = await this.db
+        .select()
+        .from(contacts)
+        .where(and(eq(contacts.id, t.contactId), isNull(contacts.deletedAt)));
+      if (!c || !canSeeCrmDatabase(auth.rights, c.databaseId))
+        throw formError([{ fieldId: 'contactId', code: 'invalid', message: 'Unknown contact.' }] as never);
+    }
+  }
+
+  private async checkParent(auth: AuthContext, id: number, parentId: string | null) {
+    if (!parentId) return;
+    await this.find(auth, Number(parentId)).catch(() => {
+      throw formError([{ fieldId: 'parentId', code: 'invalid', message: 'Unknown parent ticket.' }] as never);
+    });
+    const rows = await this.db.select({ id: tickets.id, parentId: tickets.parentId }).from(tickets);
+    const parents = new Map(rows.map((r) => [String(r.id), r.parentId === null ? null : String(r.parentId)]));
+    if (wouldCreateCycle(String(id), parentId, (x) => parents.get(x) ?? null)) {
+      throw formError([
+        { fieldId: 'parentId', code: 'cycle', message: 'A ticket cannot be its own parent or ancestor.' },
+      ] as never);
+    }
+  }
+
+  assertMoveAllowed(auth: AuthContext) {
+    if (!auth.principal.access.flags.can_move_activities)
+      throw new ForbiddenException({ message: 'Missing permission: can_move_activities.', reason: 'flag_not_granted' });
+  }
+}
+
+/** closed_at is set when a ticket becomes Closed/Archived and cleared when it reopens. */
+function closedAtFor(before: Row, state: TicketState): Date | null {
+  if (isResolved(state)) return before.closedAt ?? new Date();
+  return null;
+}
+
+export function publicTicket(t: Row) {
+  return {
+    id: t.id,
+    title: t.title,
+    description: t.description,
+    categoryId: t.categoryId,
+    state: t.state,
+    statusIds: t.statusIds,
+    priority: t.priority,
+    userId: t.userId,
+    contactId: t.contactId,
+    parentId: t.parentId,
+    mergedIntoId: t.mergedIntoId,
+    sourceActivityId: t.sourceActivityId,
+    deadline: t.deadline,
+    reopenAt: t.reopenAt,
+    closedAt: t.closedAt,
+    customFields: t.customFields,
+    version: t.version,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+    lastActivityAt: t.lastActivityAt,
+  };
+}

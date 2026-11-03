@@ -22,7 +22,9 @@ export async function createTestContext(): Promise<TestContext> {
   const pool = createPool(TEST_DATABASE_URL);
   const db = createDb(pool);
   await db.execute(sql`
-    TRUNCATE history_entries, filter_schemes, list_preferences, crm_records, contacts, accounts,
+    TRUNCATE sidebar_items, rights_profile_ticket_views, ticket_views, activities, ticket_favourites,
+      ticket_followers, tickets, rights_profile_categories, category_statuses, categories, ticket_statuses,
+      history_entries, filter_schemes, list_preferences, crm_records, contacts, accounts,
       rights_profile_crm_databases, rights_profile_crm_record_types, crm_record_types, crm_databases,
       custom_fields, audit_log, login_attempts, sessions, rights_profile_visible_users,
       rights_profile_editable_access_profiles, rights_profile_editable_rights_profiles,

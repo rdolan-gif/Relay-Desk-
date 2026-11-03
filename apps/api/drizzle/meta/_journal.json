@@ -22,6 +22,13 @@
       "when": 1793725605084,
       "tag": "0002_crm_rights_upgrade",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793726182714,
+      "tag": "0003_tickets",
+      "breakpoints": true
     }
   ]
 }

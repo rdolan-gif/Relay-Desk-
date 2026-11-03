@@ -34,6 +34,19 @@ import { RecordsService } from './crm/records.service';
 import { HistoryService } from './history/history.service';
 import { SearchController } from './search/search.controller';
 import { SearchService } from './search/search.service';
+import { ActivitiesService } from './tickets/activities.service';
+import { TicketJobsService } from './tickets/ticket-jobs.service';
+import { TicketSettingsService } from './tickets/ticket-settings.service';
+import {
+  CategoriesController,
+  StatusesController,
+  TeamViewsController,
+  TicketMetaController,
+  TicketsController,
+  TicketViewsController,
+} from './tickets/tickets.controller';
+import { TicketsService } from './tickets/tickets.service';
+import { ViewsService } from './tickets/views.service';
 
 class PoolCloser implements OnApplicationShutdown {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
@@ -68,6 +81,13 @@ export class AppModule {
         RecordsController,
         ListSettingsController,
         SearchController,
+        StatusesController,
+        CategoriesController,
+        TeamViewsController,
+        // Static ticket paths before /tickets/:id
+        TicketMetaController,
+        TicketViewsController,
+        TicketsController,
       ],
       providers: [
         { provide: CONFIG, useValue: config },
@@ -90,6 +110,11 @@ export class AppModule {
         RecordsService,
         ListSettingsService,
         SearchService,
+        TicketSettingsService,
+        TicketsService,
+        ActivitiesService,
+        ViewsService,
+        TicketJobsService,
         { provide: APP_GUARD, useClass: AuthGuard },
       ],
     };

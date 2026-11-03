@@ -1,9 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, isNull } from 'drizzle-orm';
-import { normaliseAccessProfile, type Principal, type RightsProfile } from '@relay-desk/domain';
+import { normaliseAccessProfile, type Principal, type RightsProfile, type TicketRights } from '@relay-desk/domain';
 import { DB, type Db, type DbOrTx } from '../db/db';
 import {
   accessProfiles,
+  rightsProfileCategories,
+  rightsProfileTicketViews,
   rightsProfileCrmDatabases,
   rightsProfileCrmRecordTypes,
   rightsProfileEditableAccessProfiles,
@@ -14,6 +16,8 @@ import {
 } from '../db/schema';
 
 export type UserRow = typeof users.$inferSelect;
+
+export const NO_TICKET_RIGHTS: TicketRights = { categories: [], ticketViews: [] };
 
 const NO_RIGHTS: RightsProfile = {
   userVisibility: 'selected',
@@ -39,6 +43,7 @@ export class PermissionsService {
     user: UserRow;
     principal: Principal;
     rights: RightsProfile;
+    ticketRights: TicketRights;
   } | null> {
     const [user] = await tx
       .select()
@@ -56,12 +61,36 @@ export class PermissionsService {
     }
 
     const rights = user.rightsProfileId ? await this.loadRights(user.rightsProfileId, tx) : NO_RIGHTS;
+    const ticketRights = user.rightsProfileId
+      ? await this.loadTicketRights(user.rightsProfileId, tx)
+      : NO_TICKET_RIGHTS;
 
     return {
       user,
       principal: { userId: user.id, type: user.type, isActive: user.isActive, access },
       rights: rights ?? NO_RIGHTS,
+      ticketRights,
     };
+  }
+
+  /** Category rights (Access + distribution limit) and visible team views (spec 4). */
+  async loadTicketRights(rightsProfileId: string, tx: DbOrTx = this.db): Promise<TicketRights> {
+    const [rp] = await tx.select().from(rightsProfiles).where(eq(rightsProfiles.id, rightsProfileId));
+    if (!rp || rp.deletedAt) return NO_TICKET_RIGHTS;
+    const cats = rp.allCategories
+      ? 'all'
+      : (await tx.select().from(rightsProfileCategories).where(eq(rightsProfileCategories.rightsProfileId, rp.id))).map(
+          (c) => ({ categoryId: c.categoryId, access: c.access, distributionLimit: c.distributionLimit }),
+        );
+    const views = rp.allTicketViews
+      ? 'all'
+      : (
+          await tx
+            .select({ id: rightsProfileTicketViews.viewId })
+            .from(rightsProfileTicketViews)
+            .where(eq(rightsProfileTicketViews.rightsProfileId, rp.id))
+        ).map((v) => v.id);
+    return { categories: cats, ticketViews: views };
   }
 
   async loadRights(rightsProfileId: string, tx: DbOrTx = this.db): Promise<RightsProfile | null> {

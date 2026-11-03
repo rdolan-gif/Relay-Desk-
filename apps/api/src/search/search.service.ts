@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, isNull, sql } from 'drizzle-orm';
 import { checkModuleAccess, crmDatabaseScope, recordTypeScope } from '@relay-desk/domain';
 import type { AuthContext } from '../common/request-context';
 import { scopeSql } from '../crm/crm-common';
@@ -7,15 +7,16 @@ import { AccountsService } from '../crm/accounts.service';
 import { ContactsService } from '../crm/contacts.service';
 import { RecordsService } from '../crm/records.service';
 import { DB, type Db } from '../db/db';
-import { accounts, contacts, crmRecords } from '../db/schema';
+import { accounts, contacts, crmRecords, tickets } from '../db/schema';
+import { TicketsService } from '../tickets/tickets.service';
 
 export const SEARCH_MIN_LENGTH = 3;
 const PER_TYPE = 8;
 
 /**
  * Global search (spec 14). Each result type applies the same access check and rights
- * scope as its list. Phase 1 covers CRM entities with ILIKE; tickets, KB articles and
- * full-text ranking arrive in Phase 6.
+ * scope as its list. Covers tickets (number, title, description, comments) and CRM entities
+ * with ILIKE; KB articles and full-text ranking arrive in Phase 6.
  */
 @Injectable()
 export class SearchService {
@@ -24,13 +25,14 @@ export class SearchService {
     @Inject(ContactsService) private readonly contactsService: ContactsService,
     @Inject(AccountsService) private readonly accountsService: AccountsService,
     @Inject(RecordsService) private readonly recordsService: RecordsService,
+    @Inject(TicketsService) private readonly ticketsService: TicketsService,
   ) {}
 
   async search(auth: AuthContext, q: string) {
     const term = q.trim();
-    const empty = { contacts: [], accounts: [], records: [] };
+    const empty = { tickets: [], contacts: [], accounts: [], records: [] };
     if (term.length < SEARCH_MIN_LENGTH) return empty;
-    const can = (m: 'crm_contacts' | 'crm_accounts' | 'crm_records') =>
+    const can = (m: 'tickets' | 'crm_contacts' | 'crm_accounts' | 'crm_records') =>
       checkModuleAccess(auth.principal, m, 'read').allowed;
 
     const contactRows = can('crm_contacts')
@@ -75,6 +77,20 @@ export class SearchService {
           .orderBy(asc(sql`lower(${crmRecords.title})`))
           .limit(PER_TYPE)
       : [];
-    return { contacts: contactRows, accounts: accountRows, records: recordRows };
+    const ticketRows = can('tickets')
+      ? await this.db
+          .select({ id: tickets.id, title: tickets.title, state: tickets.state })
+          .from(tickets)
+          .where(
+            and(
+              isNull(tickets.deletedAt),
+              this.ticketsService.categoryScope(auth),
+              this.ticketsService.searchSql(term),
+            ),
+          )
+          .orderBy(desc(tickets.id))
+          .limit(PER_TYPE)
+      : [];
+    return { tickets: ticketRows, contacts: contactRows, accounts: accountRows, records: recordRows };
   }
 }

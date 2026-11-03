@@ -24,7 +24,7 @@ import { PasswordService } from '../auth/password.service';
 import { SessionService } from '../auth/session.service';
 import type { AuthContext } from '../common/request-context';
 import { DB, type Db } from '../db/db';
-import { accessProfiles, rightsProfiles, users } from '../db/schema';
+import { accessProfiles, rightsProfiles, ticketFollowers, users } from '../db/schema';
 
 export interface CreateUserInput {
   email: string;
@@ -193,7 +193,8 @@ export class UsersService {
           .where(eq(users.id, id))
           .returning();
         if (deactivating || passwordHash) await this.sessions.revokeAllForUser(id, tx);
-        // TODO(Phase 2): remove the user as follower from all tickets on deactivation.
+        // Deactivated users stop following tickets (spec 4).
+        if (deactivating) await tx.delete(ticketFollowers).where(eq(ticketFollowers.userId, id));
 
         const after = publicUser(row!);
         const changes = diffFields(publicUser(before), after).filter((c) => c.field !== 'updatedAt');

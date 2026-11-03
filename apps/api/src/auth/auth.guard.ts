@@ -113,10 +113,11 @@ export class AuthGuard implements CanActivate {
   ): Promise<AuthContext | null> {
     const loaded = await this.permissions.load(userId);
     if (!loaded || !loaded.user.isActive) return null;
-    const { user, principal, rights } = loaded;
+    const { user, principal, rights, ticketRights } = loaded;
     return {
       principal,
       rights,
+      ticketRights,
       user: { id: user.id, email: user.email, name: user.name, type: user.type },
       accessProfileId: user.accessProfileId,
       rightsProfileId: user.rightsProfileId,
