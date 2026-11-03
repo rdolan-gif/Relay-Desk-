@@ -154,6 +154,41 @@ describe('CRM (spec 7, 12, 14, 17)', () => {
     });
   });
 
+  describe('duplicate warning (Q-P1-9)', () => {
+    it('when a new contact shares an email or phone with a visible contact, the check lists it', async () => {
+      const res = await admin.post('/api/crm/contacts/duplicate-check', { emails: ['SAM@acme.example'], phones: [] });
+      expect(res.status).toBe(200);
+      expect(res.body.map((c: { name: string }) => c.name)).toEqual(['Sam Smith']);
+      const byPhone = await admin.post('/api/crm/contacts/duplicate-check', { emails: [], phones: ['07911 123456'] });
+      expect(byPhone.body.map((c: { name: string }) => c.name)).toEqual(['Sam Smith']);
+    });
+    it('the contact being edited and contacts in hidden databases are not listed', async () => {
+      const sam = (await admin.get('/api/crm/contacts?q=Sam')).body.items[0];
+      const self = await admin.post('/api/crm/contacts/duplicate-check', {
+        emails: ['sam@acme.example'],
+        excludeId: sam.id,
+      });
+      expect(self.body).toEqual([]);
+      const agent = await loginAs(ctx.app, 'agent@relaydesk.local');
+      const hidden = await agent.post('/api/crm/contacts/duplicate-check', { emails: ['pat@globex.example'] });
+      expect(hidden.body).toEqual([]);
+    });
+    it('duplicates never block saving', async () => {
+      const res = await newContact({ emails: ['sam@acme.example'] });
+      expect(res.status).toBe(201);
+    });
+  });
+
+  describe('user directory', () => {
+    it('any internal user can list active users visible to them, for pickers', async () => {
+      const agent = await loginAs(ctx.app, 'agent@relaydesk.local');
+      const res = await agent.get('/api/directory/users');
+      expect(res.status).toBe(200);
+      expect(res.body.map((u: { email: string }) => u.email)).toContain('admin@relaydesk.local');
+      expect(Object.keys(res.body[0]).sort()).toEqual(['email', 'id', 'name']);
+    });
+  });
+
   describe('history and snapshots (spec 12.2, 17)', () => {
     it('every field change is logged with old and new values and the form can be viewed as it was', async () => {
       const created = await newContact();
@@ -314,6 +349,23 @@ describe('CRM (spec 7, 12, 14, 17)', () => {
       expect((await user.get(`/api/crm/records/${deal.id}`)).status).toBe(404);
       expect((await user.get('/api/search?q=renewal')).body.records).toEqual([]);
       expect((await user.get('/api/crm/meta')).body.recordTypes).toEqual([]);
+    });
+
+    it("a record linked to a contact in a hidden database does not reveal the contact's name", async () => {
+      const pat = (await admin.get('/api/crm/contacts?q=Pat')).body.items[0];
+      await admin.post('/api/crm/records', {
+        recordTypeId: ctx.ids.crm.dealType,
+        title: 'Partner deal',
+        contactId: pat.id,
+        accountId: pat.accountId,
+      });
+      const agent = await loginAs(ctx.app, 'agent@relaydesk.local');
+      const row = (await agent.get('/api/crm/records?q=Partner%20deal')).body.items[0];
+      expect(row.title).toBe('Partner deal');
+      expect(row.contactName).toBeNull();
+      expect(row.accountName).toBeNull();
+      const adminRow = (await admin.get('/api/crm/records?q=Partner%20deal')).body.items[0];
+      expect(adminRow.contactName).toBe('Pat Partner');
     });
 
     it("a record's status must be one of its type's statuses", async () => {

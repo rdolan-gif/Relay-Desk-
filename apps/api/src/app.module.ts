@@ -15,7 +15,7 @@ import { DB, PG_POOL, createDb, createPool } from './db/db';
 import { HealthController } from './health/health.controller';
 import { AccessProfilesController, RightsProfilesController } from './profiles/profiles.controller';
 import { ProfilesService } from './profiles/profiles.service';
-import { UsersController } from './users/users.controller';
+import { UserDirectoryController, UsersController } from './users/users.controller';
 import { UsersService } from './users/users.service';
 import { AccountsService } from './crm/accounts.service';
 import { ContactsService } from './crm/contacts.service';
@@ -55,6 +55,7 @@ export class AppModule {
         HealthController,
         AuthController,
         UsersController,
+        UserDirectoryController,
         AccessProfilesController,
         RightsProfilesController,
         AuditController,

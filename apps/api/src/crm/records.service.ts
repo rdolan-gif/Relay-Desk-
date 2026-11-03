@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import {
+  canSeeCrmDatabase,
   canSeeRecordType,
   canSeeUser,
   diffFields,
@@ -96,7 +97,9 @@ export class RecordsService {
         record: crmRecords,
         recordTypeTitle: crmRecordTypes.title,
         contactName: contacts.name,
+        contactDatabaseId: contacts.databaseId,
         accountName: accounts.name,
+        accountDatabaseId: accounts.databaseId,
         userName: users.name,
       })
       .from(crmRecords)
@@ -116,8 +119,9 @@ export class RecordsService {
       rows.map((r) => ({
         ...publicRecord(r.record),
         recordTypeTitle: r.recordTypeTitle,
-        contactName: r.contactName,
-        accountName: r.accountName,
+        // Linked names are shown only when the caller can see that contact/account's database.
+        contactName: r.contactDatabaseId && canSeeCrmDatabase(auth.rights, r.contactDatabaseId) ? r.contactName : null,
+        accountName: r.accountDatabaseId && canSeeCrmDatabase(auth.rights, r.accountDatabaseId) ? r.accountName : null,
         userName: r.userName,
       })),
       total,

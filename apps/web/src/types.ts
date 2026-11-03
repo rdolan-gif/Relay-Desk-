@@ -43,6 +43,8 @@ export interface RightsProfileDto {
   visibleUserIds: string[];
   editableAccessProfiles: 'all' | string[];
   editableRightsProfiles: 'all' | string[];
+  crmDatabases: 'all' | string[];
+  crmRecordTypes: 'all' | string[];
 }
 
 export interface AuditEntry {

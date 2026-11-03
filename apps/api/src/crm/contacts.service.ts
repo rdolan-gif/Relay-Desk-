@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import {
   canLinkContactToAccount,
   canSeeCrmDatabase,
@@ -7,6 +7,8 @@ import {
   diffFields,
   flattenForHistory,
   normaliseContactIdentifiers,
+  normaliseEmailAddress,
+  normalisePhone,
   type CustomValues,
 } from '@relay-desk/domain';
 import type { AuthContext } from '../common/request-context';
@@ -108,6 +110,44 @@ export class ContactsService {
       );
     }
     return or(...parts)!;
+  }
+
+  /**
+   * Visible contacts sharing any of the given emails or phones (after normalisation).
+   * Used to warn about likely duplicates before saving; never blocks (Q-P1-9).
+   */
+  async findDuplicates(auth: AuthContext, input: { emails: string[]; phones: string[]; excludeId?: string }) {
+    const emails = input.emails.map((e) => normaliseEmailAddress(e)).flatMap((r) => (r.ok ? [r.value] : []));
+    const phones = input.phones.map((p) => normalisePhone(p)).flatMap((r) => (r.ok ? [r.value] : []));
+    if (!emails.length && !phones.length) return [];
+    const match: SQL[] = [];
+    if (emails.length)
+      match.push(
+        sql`${contacts.emails} && ${sql`array[${sql.join(
+          emails.map((e) => sql`${e}`),
+          sql`, `,
+        )}]::text[]`}`,
+      );
+    if (phones.length)
+      match.push(
+        sql`${contacts.phones} && ${sql`array[${sql.join(
+          phones.map((p) => sql`${p}`),
+          sql`, `,
+        )}]::text[]`}`,
+      );
+    const rows = await this.db
+      .select({ id: contacts.id, name: contacts.name, emails: contacts.emails, phones: contacts.phones })
+      .from(contacts)
+      .where(
+        and(
+          isNull(contacts.deletedAt),
+          scopeSql(contacts.databaseId, crmDatabaseScope(auth.rights)),
+          input.excludeId ? ne(contacts.id, input.excludeId) : undefined,
+          or(...match),
+        ),
+      )
+      .limit(10);
+    return rows;
   }
 
   async get(auth: AuthContext, id: string) {

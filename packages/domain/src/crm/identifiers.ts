@@ -1,4 +1,4 @@
-import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
+import { getCountryCallingCode, parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
 
 /** Default region for numbers written without an international prefix (spec 12.3). */
 export const DEFAULT_PHONE_REGION: CountryCode = 'GB';
@@ -60,4 +60,18 @@ export function normaliseContactIdentifiers(input: {
 /** A contact can be matched only if it has at least one email or phone (spec 12.3). */
 export function isMatchable(contact: { emails: readonly string[]; phones: readonly string[] }): boolean {
   return contact.emails.length > 0 || contact.phones.length > 0;
+}
+
+/**
+ * Display format for a stored E.164 number (docs/open-questions.md, Q-P1-8): numbers in
+ * the default region use national format (07911 123456); others use international
+ * format (+33 1 42 68 53 00). Unparseable values are shown as stored.
+ */
+export function formatPhoneForDisplay(e164: string, region: CountryCode = DEFAULT_PHONE_REGION): string {
+  const parsed = parsePhoneNumberFromString(e164);
+  if (!parsed) return e164;
+  // Compare calling codes: +44 is shared by GB, Jersey, Guernsey and the Isle of Man.
+  return parsed.countryCallingCode === getCountryCallingCode(region)
+    ? parsed.formatNational()
+    : parsed.formatInternational();
 }

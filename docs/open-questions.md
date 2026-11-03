@@ -39,3 +39,41 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 | Q-P0-15 | Settings modules                                     | Every Settings page is its own module in access profiles. Pages for later phases are already listed so profiles can be prepared in advance.                                                                                                                                                                                               | Assumed               |
 | Q-P0-16 | Stack choices within spec 18                         | Drizzle ORM (typed SQL, plain SQL migrations), Mantine (accessible components), Vitest, zod validation, sessions in Postgres with an httpOnly SameSite=Lax cookie plus a CSRF header token.                                                                                                                                               | Assumed               |
 | Q-P0-17 | Audit actor on failed login                          | A failed login for an unknown email is logged with the attempted email as `actorLabel` and no user ID.                                                                                                                                                                                                                                    | Assumed               |
+
+## Phase 1 decisions
+
+| #       | Topic                               | Decision                                                                                                                                                                                           | Status  |
+| ------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Q-P1-1  | CRM rights                          | Rights profiles grant CRM databases and record types as "all" or a list. Existing full administrators were upgraded to "all" by migration. Nobody can grant a scope they can't see themselves.     | Assumed |
+| Q-P1-2  | Creating databases and record types | Only users who can see all databases (or all record types) may create one; otherwise they couldn't see what they had made.                                                                         | Assumed |
+| Q-P1-3  | Contact ↔ account                   | A contact can only be linked to an account in the same CRM database.                                                                                                                               | Assumed |
+| Q-P1-4  | Record visibility                   | Records are visible by record type. In record lists, a linked contact or account name is blanked if its database is hidden from you.                                                               | Assumed |
+| Q-P1-5  | "Hidden from agents" fields         | Not shown in the form and cannot be changed through it; values still exist in the API. Portal hiding arrives in Phase 7.                                                                           | Assumed |
+| Q-P1-6  | Filter details                      | All conditions must match (AND). Text matching ignores case; option values match exactly. Dates compare on the UTC calendar date. Numbers support is / is not / empty (the spec's operator list).  | Assumed |
+| Q-P1-7  | Search                              | Phase 1 searches contacts (name, email, phone digits), accounts and records with simple matching, respecting rights. Tickets, KB and full-text ranking arrive in Phase 6.                          | Assumed |
+| Q-P1-8  | Phone display                       | **Decided (owner, 03/11/2026):** UK numbers shown UK-style (07911 123456); other countries international (+33 1 42 68 53 00). Always stored in E.164.                                              | Decided |
+| Q-P1-9  | Duplicate contacts                  | **Decided (owner):** warn when an email or phone matches another visible contact, but allow saving. Merge arrives in Phase 6.                                                                      | Decided |
+| Q-P1-10 | Phone validation                    | **Decided (owner):** strict, only numbers in allocated ranges. Note: Ofcom's reserved "drama" numbers (e.g. 07700 900xxx) are rejected.                                                            | Decided |
+| Q-P1-11 | Quick actions                       | **Decided (owner):** copy buttons on emails and phones. No click-to-call; calls use a landline system.                                                                                             | Decided |
+| Q-P1-12 | Deleting                            | Contacts, accounts and records are soft-deleted. An account with contacts, a non-empty database, the default database, a field still on a form and a record status still in use cannot be deleted. | Assumed |
+| Q-P1-13 | Section descriptions                | Plain text for now (spec says rich text); upgrade with the rich-text editor in Phase 2.                                                                                                            | Assumed |
+| Q-P1-14 | Form builder                        | Drag (or keyboard) to reorder sections and fields; fields move between sections with a "Move to section" menu.                                                                                     | Assumed |
+| Q-P1-15 | Contacts without email or phone     | Allowed, but they can never be matched to incoming email (spec 12.3).                                                                                                                              | Assumed |
+
+## Questions for the owner — 04/11/2026, 08:00
+
+1. **Click to email.** You chose copy buttons. Should email addresses also open your mail
+   program (Outlook etc.) until ticket email arrives in Phase 3? (Quick yes/no.)
+2. **Your real CRM layout.** What does your team keep on contacts and accounts today, and do
+   you need more than one CRM database (e.g. per brand or team)? What long-lived records do
+   you track (deals, contracts, complaints, orders)? I'll replace the demo data with yours.
+3. **Phase 2 (tickets) inputs.** Which ticket categories and statuses do you use now, and which
+   fields go on ticket forms?
+4. **Merging tickets (S-4).** When two tickets are merged, should the merged-away ticket be
+   archived with a link (spec default), deleted, or kept as a child?
+5. **Volumes (S-6).** Roughly how many agents, mailboxes and emails per day?
+6. **Migration (S-7).** Do you need your existing tickets, contacts and history brought across
+   from the current system?
+7. **Customer portal (S-8).** Needed in v1, or later?
+8. **Email routing (S-3, Phase 3).** When several routing rules match an email, should only the
+   first apply, or all of them in order?

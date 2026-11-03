@@ -18,6 +18,7 @@ import { useAuth } from '../../auth';
 import { t } from '../../i18n/en-GB';
 import { notifyError, notifyOk } from '../../notify';
 import type { AccessProfileDto, RightsProfileDto, User } from '../../types';
+import { useCrmMeta } from '../../crm/hooks';
 
 type Draft = Omit<RightsProfileDto, 'id'> & { id?: string };
 const EMPTY: Draft = {
@@ -27,6 +28,8 @@ const EMPTY: Draft = {
   visibleUserIds: [],
   editableAccessProfiles: [],
   editableRightsProfiles: [],
+  crmDatabases: [],
+  crmRecordTypes: [],
 };
 
 function AllOrList(props: {
@@ -73,6 +76,7 @@ export function RightsProfilesPage() {
     enabled: can('settings_users', 'read'),
   });
   const [draft, setDraft] = useState<Draft | null>(null);
+  const meta = useCrmMeta();
 
   const save = useMutation({
     mutationFn: (d: Draft) => {
@@ -157,6 +161,18 @@ export function RightsProfilesPage() {
                 searchable
               />
             )}
+            <AllOrList
+              label={t.crmSettings.crmDatabasesRights}
+              value={draft.crmDatabases}
+              options={(meta.data?.databases ?? []).map((d) => ({ value: d.id, label: d.title }))}
+              onChange={(v) => setDraft({ ...draft, crmDatabases: v })}
+            />
+            <AllOrList
+              label={t.crmSettings.recordTypesRights}
+              value={draft.crmRecordTypes}
+              options={(meta.data?.recordTypes ?? []).map((rt) => ({ value: rt.id, label: rt.title }))}
+              onChange={(v) => setDraft({ ...draft, crmRecordTypes: v })}
+            />
             <AllOrList
               label={t.profiles.editableAccess}
               value={draft.editableAccessProfiles}

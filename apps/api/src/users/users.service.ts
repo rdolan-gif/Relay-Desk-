@@ -73,6 +73,21 @@ export class UsersService {
     return filterVisibleUsers(auth.rights, auth.user.id, rows).map(publicUser);
   }
 
+  /**
+   * Active users visible under the caller's rights, for owner and user pickers. Open to
+   * every internal user, unlike the Settings > Users list.
+   */
+  async directory(auth: AuthContext) {
+    const rows = await this.db
+      .select()
+      .from(users)
+      .where(and(isNull(users.deletedAt), eq(users.isActive, true)))
+      .orderBy(users.name);
+    return filterVisibleUsers(auth.rights, auth.user.id, rows)
+      .filter((u) => u.type !== 'external')
+      .map((u) => ({ id: u.id, name: u.name, email: u.email }));
+  }
+
   async get(auth: AuthContext, id: string) {
     return publicUser(await this.find(auth, id));
   }

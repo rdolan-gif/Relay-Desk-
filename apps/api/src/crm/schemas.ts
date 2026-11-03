@@ -109,3 +109,9 @@ export const filterSchemeSchema = z.object({
 
 export const columnsSchema = z.object({ columns: z.array(z.string().max(100)).max(50) });
 export const listNameSchema = z.object({ list: z.enum(LISTS) });
+
+export const duplicateCheckSchema = z.object({
+  emails: z.array(z.string().max(320)).max(20).default([]),
+  phones: z.array(z.string().max(50)).max(20).default([]),
+  excludeId: z.string().uuid().optional(),
+});

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { isMatchable, normaliseContactIdentifiers, normaliseEmailAddress, normalisePhone } from './identifiers.js';
+import {
+  formatPhoneForDisplay,
+  isMatchable,
+  normaliseContactIdentifiers,
+  normaliseEmailAddress,
+  normalisePhone,
+} from './identifiers.js';
 
 describe('contact identifier normalisation (spec 12.3)', () => {
   it('when an email is saved, the system lower-cases and trims it', () => {
@@ -37,5 +43,18 @@ describe('contact identifier normalisation (spec 12.3)', () => {
   it('a contact with neither email nor phone cannot be matched', () => {
     expect(isMatchable({ emails: [], phones: [] })).toBe(false);
     expect(isMatchable({ emails: ['a@b.co'], phones: [] })).toBe(true);
+  });
+});
+
+describe('phone display (Q-P1-8)', () => {
+  it('UK numbers are shown in UK national format', () => {
+    expect(formatPhoneForDisplay('+447911123456')).toBe('07911 123456');
+    expect(formatPhoneForDisplay('+442079460958')).toBe('020 7946 0958');
+  });
+  it('other countries are shown in international format', () => {
+    expect(formatPhoneForDisplay('+33142685300')).toBe('+33 1 42 68 53 00');
+  });
+  it('unparseable values are shown as stored', () => {
+    expect(formatPhoneForDisplay('garbage')).toBe('garbage');
   });
 });

@@ -11,7 +11,8 @@ Build strictly in the phase order of `docs/spec/20-build-plan-and-acceptance-cri
 Progress and the test for each acceptance criterion: `docs/progress.md`.
 
 - Phase 0 (foundations): **done**
-- Next: Phase 1 (CRM core)
+- Phase 1 (CRM core): **done**
+- Next: Phase 2 (tickets without email)
 
 ## Stack
 
@@ -68,3 +69,10 @@ Integration tests drop and recreate the schema of `TEST_DATABASE_URL`
 - **UI strings** go in `apps/web/src/i18n/en-GB.ts` (British English). Dates via
   `formatDateTime` (DD/MM/YYYY, 24-hour, user timezone). Keep components keyboard accessible.
 - API in CommonJS (NestJS), domain in ESM; Node 22 `require(esm)` bridges them.
+- **CRM scoping**: contacts/accounts by `rights.crmDatabases`, records by `rights.crmRecordTypes`;
+  use `scopeSql` in lists and `find()` (404 when out of scope) for single items. Any new list,
+  search or export must apply the same scope.
+- **Custom values** are stored as JSONB keyed by field id and always go through
+  `applyCustomInput` (layout rules + type validation). History flattens them to `custom.<id>`.
+- **Filters**: validate with domain `validateConditions`, translate with `filterSql`; keep
+  `matchesConditions` (domain) and `conditionToSql` (API) in agreement.

@@ -1,5 +1,50 @@
 # Build progress
 
+## Phase 1 — CRM core ✅
+
+Scope (spec 20): CRM databases, custom field pool, form builder, contacts, accounts,
+record types and records, history, contact list filters.
+
+**Done when:** a contact with two emails and a UK phone saves normalised; a user without
+that database in their rights cannot find it in list, search or API.
+
+| Criterion / rule                                                                                        | Test                                                                   |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Two emails and a UK phone save normalised (lower-case; E.164)                                           | `apps/api/test/phase1-acceptance.test.ts`, `e2e/tests/phase1.spec.ts`  |
+| No database in rights → not in list, `q` search, filters, global search, by-id API, metadata            | `phase1-acceptance.test.ts`, `e2e/tests/phase1.spec.ts`                |
+| Email/phone normalisation, UK display format                                                            | `packages/domain/src/crm/identifiers.test.ts`                          |
+| Custom field types, immutable key/type, option-removal usage warning, delete blocked while on a form    | `custom-fields/fields.test.ts`, `apps/api/test/crm.test.ts`            |
+| Form layouts: validation, required, read-only, hidden, defaults, dynamic visibility                     | `forms/form-layout.test.ts`, `crm.test.ts`, `e2e/tests/phase1.spec.ts` |
+| Exactly one default CRM database; delete rules                                                          | `crm.test.ts`                                                          |
+| Contacts, accounts, records CRUD; contact and account in the same database; record status from its type | `crm.test.ts`, `crm/records.test.ts`                                   |
+| Record types in rights; linked names hidden when their database is hidden                               | `crm.test.ts`                                                          |
+| History with old/new values; form as it was at any past point                                           | `history/snapshot.test.ts`, `crm.test.ts`                              |
+| List filters (is, is not, contains, empty, before/after, in last N days), search, sort, paging          | `filters/filters.test.ts`, `crm.test.ts`                               |
+| Saved filter schemes (private), column choices per user                                                 | `crm.test.ts`                                                          |
+| Possible-duplicate warning (never blocks)                                                               | `crm.test.ts`                                                          |
+| Rights: CRM scopes can't be delegated beyond your own                                                   | `crm.test.ts`                                                          |
+
+What exists:
+
+- API: `/api/settings/{custom-fields,crm-databases,crm-record-types}`, `/api/crm/meta`,
+  `/api/crm/{contacts,accounts,records}` (list with `q`/`filter`/`sort`/paging, CRUD,
+  `/history`, `/snapshot?at=`, linked records/contacts), `/api/crm/contacts/duplicate-check`,
+  `/api/me/lists/...` (filter schemes, columns), `/api/directory/users`, `/api/search`.
+- Web: CRM menu (contacts, accounts, records) with search, filter builder, saved filters,
+  column chooser, paging; detail pages with custom forms, linked records, history and
+  "view form as it was"; top-bar search; Settings pages for custom fields, CRM databases
+  (drag-and-drop contact/account form builder) and record types; CRM scopes on rights
+  profiles.
+- Seed: Customers (default, agents can see) and Partners (admins only) databases, six demo
+  fields, three contacts, two accounts, a Deal record type and one deal.
+
+Deferred, per the build plan or for later decision (see `docs/open-questions.md`):
+
+- Import/export, merge, bulk edit, delete-recovery and anonymise: Phase 6.
+- Contact Activities and Tickets tabs: Phases 2–3. Attachments and iFrame tabs: later
+  (need object storage / categories).
+- Account SLA: Phase 4. Contact card in the ticket: Phase 2.
+
 ## Phase 0 — Foundations ✅
 
 Scope (spec 20): repo, CLAUDE.md, Docker Compose (app, Postgres, Redis, object storage, test

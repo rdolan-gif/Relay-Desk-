@@ -15,6 +15,13 @@
       "when": 1793724209370,
       "tag": "0001_crm_core",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793725605084,
+      "tag": "0002_crm_rights_upgrade",
+      "breakpoints": true
     }
   ]
 }

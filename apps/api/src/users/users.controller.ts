@@ -2,7 +2,7 @@ import { Body, Controller, Get, Inject, Param, ParseUUIDPipe, Patch, Post, Req }
 import { ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { USER_TYPES } from '@relay-desk/domain';
-import { Auth, RequireAccess } from '../auth/decorators';
+import { Auth, AuthenticatedOnly, RequireAccess } from '../auth/decorators';
 import { ZodPipe } from '../common/zod.pipe';
 import { clientIp, type AppRequest, type AuthContext } from '../common/request-context';
 import { UsersService } from './users.service';
@@ -64,5 +64,17 @@ export class UsersController {
     @Body(new ZodPipe(updateSchema)) body: z.infer<typeof updateSchema>,
   ) {
     return this.users.update(auth, id, body, clientIp(req));
+  }
+}
+
+@ApiTags('users')
+@Controller('directory/users')
+export class UserDirectoryController {
+  constructor(@Inject(UsersService) private readonly users: UsersService) {}
+
+  @AuthenticatedOnly()
+  @Get()
+  list(@Auth() auth: AuthContext) {
+    return this.users.directory(auth);
   }
 }

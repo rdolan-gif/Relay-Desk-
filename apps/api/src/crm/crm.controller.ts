@@ -32,6 +32,7 @@ import {
   columnsSchema,
   contactCreateSchema,
   contactUpdateSchema,
+  duplicateCheckSchema,
   filterSchemeSchema,
   listNameSchema,
   recordCreateSchema,
@@ -101,6 +102,16 @@ export class ContactsController {
   async recordsOf(@Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Query(listPipe) q: ListQuery) {
     await this.contacts.find(auth, id);
     return this.records.list(auth, q, [eq(crmRecords.contactId, id)]);
+  }
+
+  @RequireAccess('crm_contacts', 'read')
+  @Post('duplicate-check')
+  @HttpCode(200)
+  duplicates(
+    @Auth() auth: AuthContext,
+    @Body(new ZodPipe(duplicateCheckSchema)) body: z.infer<typeof duplicateCheckSchema>,
+  ) {
+    return this.contacts.findDuplicates(auth, body);
   }
 
   @RequireAccess('crm_contacts', 'create')
