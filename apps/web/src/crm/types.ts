@@ -19,10 +19,10 @@ export interface CrmMeta {
   databases: CrmDatabase[];
   recordTypes: RecordType[];
   customFields: CustomFieldDef[];
-  filterFields: Record<ListName, FilterFieldDef[]>;
+  filterFields: Record<Exclude<ListName, 'tickets'>, FilterFieldDef[]>;
 }
 
-export type ListName = 'contacts' | 'accounts' | 'records';
+export type ListName = 'contacts' | 'accounts' | 'records' | 'tickets';
 export type CustomValues = Record<string, unknown>;
 
 export interface Page<T> {

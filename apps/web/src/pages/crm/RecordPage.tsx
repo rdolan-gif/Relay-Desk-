@@ -1,17 +1,4 @@
-import {
-  Alert,
-  Button,
-  Grid,
-  Group,
-  Paper,
-  SegmentedControl,
-  Select,
-  Stack,
-  Tabs,
-  Text,
-  TextInput,
-  Title,
-} from '@mantine/core';
+import { Alert, Button, Grid, Group, Paper, Select, Stack, Tabs, Text, TextInput, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -20,6 +7,7 @@ import { useAuth } from '../../auth';
 import { DynamicForm } from '../../components/DynamicForm';
 import { AccountPicker, ContactPicker, UserPicker } from '../../components/FieldInput';
 import { HistoryPanel } from '../../components/HistoryPanel';
+import { Segmented } from '../../components/Segmented';
 import { useCrmMeta } from '../../crm/hooks';
 import type { CrmRecord, CustomValues } from '../../crm/types';
 import { useFieldErrors } from '../../crm/useEntityForm';
@@ -178,7 +166,8 @@ export function RecordPage() {
                     <Text size="sm" fw={500} mb={4}>
                       {t.crm.stage}
                     </Text>
-                    <SegmentedControl
+                    <Segmented
+                      label={t.crm.stage}
                       data={[
                         { value: 'open', label: t.crm.stages.open },
                         { value: 'closed', label: t.crm.stages.closed },

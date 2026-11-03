@@ -19,6 +19,7 @@ import { t } from '../../i18n/en-GB';
 import { notifyError, notifyOk } from '../../notify';
 import type { AccessProfileDto, RightsProfileDto, User } from '../../types';
 import { useCrmMeta } from '../../crm/hooks';
+import { CategoryRightsEditor } from './CategoryRightsEditor';
 
 type Draft = Omit<RightsProfileDto, 'id'> & { id?: string };
 const EMPTY: Draft = {
@@ -30,6 +31,8 @@ const EMPTY: Draft = {
   editableRightsProfiles: [],
   crmDatabases: [],
   crmRecordTypes: [],
+  categories: [],
+  ticketViews: [],
 };
 
 function AllOrList(props: {
@@ -77,6 +80,11 @@ export function RightsProfilesPage() {
   });
   const [draft, setDraft] = useState<Draft | null>(null);
   const meta = useCrmMeta();
+  const teamViews = useQuery({
+    queryKey: ['team-views'],
+    queryFn: () => api<{ id: string; name: string }[]>('GET', '/settings/ticket-views'),
+    enabled: can('settings_ticket_views', 'read'),
+  });
 
   const save = useMutation({
     mutationFn: (d: Draft) => {
@@ -161,6 +169,16 @@ export function RightsProfilesPage() {
                 searchable
               />
             )}
+            <CategoryRightsEditor
+              value={draft.categories}
+              onChange={(categories) => setDraft({ ...draft, categories })}
+            />
+            <AllOrList
+              label={t.ticketSettings.teamViewsRights}
+              value={draft.ticketViews}
+              options={(teamViews.data ?? []).map((v) => ({ value: v.id, label: v.name }))}
+              onChange={(v) => setDraft({ ...draft, ticketViews: v })}
+            />
             <AllOrList
               label={t.crmSettings.crmDatabasesRights}
               value={draft.crmDatabases}

@@ -28,6 +28,9 @@ import { AccountPage as CrmAccountPage } from './pages/crm/AccountPage';
 import { ContactPage } from './pages/crm/ContactPage';
 import { AccountsPage, ContactsPage, RecordsPage } from './pages/crm/ListPages';
 import { RecordPage } from './pages/crm/RecordPage';
+import { TicketPage } from './pages/tickets/TicketPage';
+import { TicketsPage } from './pages/tickets/TicketsPage';
+import { CategoriesPage, StatusesPage, TeamViewsPage } from './pages/settings/TicketSettingsPages';
 import { CustomFieldsPage } from './pages/settings/CustomFieldsPage';
 import { CrmDatabasesPage, RecordTypesPage } from './pages/settings/CrmDatabasesPage';
 
@@ -68,6 +71,9 @@ function Shell() {
     { to: '/settings/users', label: t.nav.users, module: 'settings_users' as const },
     { to: '/settings/access-profiles', label: t.nav.accessProfiles, module: 'settings_access_profiles' as const },
     { to: '/settings/rights-profiles', label: t.nav.rightsProfiles, module: 'settings_rights_profiles' as const },
+    { to: '/settings/categories', label: t.nav.categories, module: 'settings_categories' as const },
+    { to: '/settings/statuses', label: t.nav.statuses, module: 'settings_statuses' as const },
+    { to: '/settings/ticket-views', label: t.nav.ticketViews, module: 'settings_ticket_views' as const },
     { to: '/settings/custom-fields', label: t.nav.customFields, module: 'settings_custom_fields' as const },
     { to: '/settings/crm-databases', label: t.nav.crmDatabases, module: 'settings_crm_databases' as const },
     { to: '/settings/crm-record-types', label: t.nav.recordTypes, module: 'settings_crm_record_types' as const },
@@ -91,7 +97,7 @@ function Shell() {
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" aria-label="Menu" />
             <Title order={4}>{t.appName}</Title>
           </Group>
-          {crmLinks.length > 0 && <GlobalSearch />}
+          {(crmLinks.length > 0 || can('tickets', 'read')) && <GlobalSearch />}
           <Group>
             <Text size="sm">{me!.user.name}</Text>
             <ActionIcon variant="subtle" onClick={toggleColorScheme} aria-label={t.common.theme}>
@@ -102,6 +108,14 @@ function Shell() {
       </AppShell.Header>
       <AppShell.Navbar p="xs" component="nav" aria-label="Main">
         <NavLink component={RouterLink} to="/" label={t.nav.home} active={location.pathname === '/'} />
+        {can('tickets', 'read') && (
+          <NavLink
+            component={RouterLink}
+            to="/tickets"
+            label={t.nav.tickets}
+            active={location.pathname.startsWith('/tickets')}
+          />
+        )}
         {crmLinks.length > 0 && (
           <NavLink label={t.nav.crm} defaultOpened>
             {crmLinks.map((l) => (
@@ -140,6 +154,11 @@ function Shell() {
           <Route path="/settings/rights-profiles" element={<RightsProfilesPage />} />
           <Route path="/settings/audit-log" element={<AuditLogPage />} />
           <Route path="/settings/custom-fields" element={<CustomFieldsPage />} />
+          <Route path="/settings/categories" element={<CategoriesPage />} />
+          <Route path="/settings/statuses" element={<StatusesPage />} />
+          <Route path="/settings/ticket-views" element={<TeamViewsPage />} />
+          <Route path="/tickets" element={<TicketsPage />} />
+          <Route path="/tickets/:id" element={<TicketPage />} />
           <Route path="/settings/crm-databases" element={<CrmDatabasesPage />} />
           <Route path="/settings/crm-record-types" element={<RecordTypesPage />} />
           <Route path="/crm/contacts" element={<ContactsPage />} />

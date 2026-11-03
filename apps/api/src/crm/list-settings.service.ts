@@ -7,6 +7,7 @@ import { DB, type Db } from '../db/db';
 import { filterSchemes, listPreferences } from '../db/schema';
 import { filterFields, type ListName } from './crm-common';
 import { CustomFieldsService } from './custom-fields.service';
+import { ticketFilterFields } from '../tickets/ticket-filters';
 
 /** Saved filter schemes (private to their owner) and per-user column choices. */
 @Injectable()
@@ -28,7 +29,18 @@ export class ListSettingsService {
     auth: AuthContext,
     input: { id?: string; list: ListName; name: string; conditions: FilterCondition[] },
   ) {
-    const check = validateConditions(filterFields(input.list, (await this.fields.map()).values()), input.conditions);
+    const custom = (await this.fields.map()).values();
+    const defs = input.list === 'tickets' ? ticketFilterFields(custom) : filterFields(input.list, custom);
+    // "@me" is resolved per user when the filter runs.
+    const placeholder = '00000000-0000-4000-8000-000000000000';
+    const check = validateConditions(
+      defs,
+      input.conditions.map((c) => (c.value === '@me' ? { ...c, value: placeholder } : c)),
+    );
+    if (check.ok)
+      check.conditions = check.conditions.map((c, i) =>
+        input.conditions[i]!.value === '@me' ? { ...c, value: '@me' } : c,
+      );
     if (!check.ok)
       throw new BadRequestException({
         message: check.errors.join(' '),

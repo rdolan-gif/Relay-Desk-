@@ -21,7 +21,7 @@ import type { AuthContext } from '../common/request-context';
 import { crmRecords } from '../db/schema';
 import { AccountsService } from './accounts.service';
 import { ContactsService } from './contacts.service';
-import { filterFields, listQuerySchema, LISTS, type ListQuery } from './crm-common';
+import { filterFields, listQuerySchema, type ListQuery } from './crm-common';
 import { CrmSettingsService } from './crm-settings.service';
 import { CustomFieldsService } from './custom-fields.service';
 import { ListSettingsService } from './list-settings.service';
@@ -60,7 +60,9 @@ export class CrmMetaController {
       databases: await this.settings.listDatabases(auth),
       recordTypes: await this.settings.listRecordTypes(auth),
       customFields,
-      filterFields: Object.fromEntries(LISTS.map((l) => [l, filterFields(l, customFields)])),
+      filterFields: Object.fromEntries(
+        (['contacts', 'accounts', 'records'] as const).map((l) => [l, filterFields(l, customFields)]),
+      ),
     };
   }
 }

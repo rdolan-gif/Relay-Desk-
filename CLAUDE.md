@@ -12,7 +12,8 @@ Progress and the test for each acceptance criterion: `docs/progress.md`.
 
 - Phase 0 (foundations): **done**
 - Phase 1 (CRM core): **done**
-- Next: Phase 2 (tickets without email)
+- Phase 2 (tickets without email): **done**
+- Next: Phase 3 (email channel)
 
 ## Stack
 
@@ -69,10 +70,17 @@ Integration tests drop and recreate the schema of `TEST_DATABASE_URL`
 - **UI strings** go in `apps/web/src/i18n/en-GB.ts` (British English). Dates via
   `formatDateTime` (DD/MM/YYYY, 24-hour, user timezone). Keep components keyboard accessible.
 - API in CommonJS (NestJS), domain in ESM; Node 22 `require(esm)` bridges them.
+- **Web gotchas**: Mantine `Select` treats items with a `group` key as option groups (use
+  `{ group, items }`); searchable selects must keep option labels stable or they loop; avoid
+  `SegmentedControl` (use `components/Segmented`).
 - **CRM scoping**: contacts/accounts by `rights.crmDatabases`, records by `rights.crmRecordTypes`;
   use `scopeSql` in lists and `find()` (404 when out of scope) for single items. Any new list,
   search or export must apply the same scope.
 - **Custom values** are stored as JSONB keyed by field id and always go through
   `applyCustomInput` (layout rules + type validation). History flattens them to `custom.<id>`.
+- **Ticket rules**: state changes go through `applySaveRules` (with the right `SaveSource`) and
+  `automaticState`/`resolveState`; tickets are scoped by `auth.ticketRights` (category Access)
+  via `TicketsService.find()` / `categoryScope()`. Comment/description HTML goes through
+  `sanitizeRich`.
 - **Filters**: validate with domain `validateConditions`, translate with `filterSql`; keep
   `matchesConditions` (domain) and `conditionToSql` (API) in agreement.

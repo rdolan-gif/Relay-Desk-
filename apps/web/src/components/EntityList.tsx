@@ -31,9 +31,13 @@ export interface Column<T> {
   sortKey?: string;
 }
 
-interface Props<T> {
+interface Props<T extends { id: string | number }> {
   list: ListName;
-  title: string;
+  title: ReactNode;
+  /** Extra query parameters, e.g. the selected ticket view. */
+  extraParams?: Record<string, string | undefined>;
+  /** Bulk actions for selected rows; enables row checkboxes. */
+  bulkActions?: (ids: T['id'][], clear: () => void) => ReactNode;
   endpoint: string;
   columns: Column<T>[];
   defaultColumns: string[];
@@ -49,7 +53,7 @@ const PAGE_SIZE = 50;
  * Shared list screen (spec 6.1, 12.2, 14): search, filter conditions, saved filter
  * schemes, user-chosen columns (persisted per user), sorting and pagination.
  */
-export function EntityList<T extends { id: string }>(props: Props<T>) {
+export function EntityList<T extends { id: string | number }>(props: Props<T>) {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [debounced] = useDebouncedValue(search, 300);
@@ -60,15 +64,20 @@ export function EntityList<T extends { id: string }>(props: Props<T>) {
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [schemeName, setSchemeName] = useState('');
+  const [selected, setSelected] = useState<T['id'][]>([]);
 
-  useEffect(() => setPage(1), [debounced, applied]);
+  useEffect(() => {
+    setPage(1);
+    setSelected([]);
+  }, [debounced, applied, JSON.stringify(props.extraParams)]);
 
   const data = useQuery({
-    queryKey: [props.endpoint, debounced, applied, page, sort],
+    queryKey: [props.endpoint, debounced, applied, page, sort, props.extraParams],
     queryFn: () =>
       api<Page<T>>(
         'GET',
         `${props.endpoint}${qs({
+          ...props.extraParams,
           q: debounced.length >= 2 ? debounced : undefined,
           filter: applied.length ? JSON.stringify(applied) : undefined,
           page,
@@ -205,9 +214,26 @@ export function EntityList<T extends { id: string }>(props: Props<T>) {
           </Stack>
         </Paper>
       )}
+      {props.bulkActions && selected.length > 0 && (
+        <Group>
+          <Text size="sm">{`${selected.length} selected`}</Text>
+          {props.bulkActions(selected, () => setSelected([]))}
+        </Group>
+      )}
       <Table striped highlightOnHover>
         <Table.Thead>
           <Table.Tr>
+            {props.bulkActions && (
+              <Table.Th w={36}>
+                <Checkbox
+                  aria-label="Select all on this page"
+                  checked={!!data.data?.items.length && data.data.items.every((r) => selected.includes(r.id))}
+                  onChange={(e) =>
+                    setSelected(e.currentTarget.checked ? (data.data?.items.map((r) => r.id) ?? []) : [])
+                  }
+                />
+              </Table.Th>
+            )}
             {visibleColumns.map((c) => (
               <Table.Th
                 key={c.key}
@@ -232,6 +258,18 @@ export function EntityList<T extends { id: string }>(props: Props<T>) {
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && props.onOpen(row)}
             >
+              {props.bulkActions && (
+                <Table.Td onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    aria-label={`Select ${row.id}`}
+                    checked={selected.includes(row.id)}
+                    onChange={(e) => {
+                      const on = e.currentTarget.checked;
+                      setSelected((s) => (on ? [...s, row.id] : s.filter((x) => x !== row.id)));
+                    }}
+                  />
+                </Table.Td>
+              )}
               {visibleColumns.map((c) => (
                 <Table.Td key={c.key}>{c.render(row)}</Table.Td>
               ))}
@@ -239,7 +277,7 @@ export function EntityList<T extends { id: string }>(props: Props<T>) {
           ))}
           {data.data && data.data.items.length === 0 && (
             <Table.Tr>
-              <Table.Td colSpan={visibleColumns.length}>
+              <Table.Td colSpan={visibleColumns.length + (props.bulkActions ? 1 : 0)}>
                 <Text c="dimmed">{t.crm.noResults}</Text>
               </Table.Td>
             </Table.Tr>

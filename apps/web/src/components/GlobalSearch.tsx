@@ -7,6 +7,7 @@ import { api } from '../api';
 import { t } from '../i18n/en-GB';
 
 interface Results {
+  tickets: { id: number; title: string }[];
   contacts: { id: string; name: string; emails: string[] }[];
   accounts: { id: string; name: string }[];
   records: { id: string; title: string }[];

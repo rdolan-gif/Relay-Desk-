@@ -1,5 +1,53 @@
 # Build progress
 
+## Phase 2 — Tickets without email ✅
+
+Scope (spec 20): categories (all settings in 7.1), statuses, priorities, ticket CRUD, list,
+team/my views, filter schemes, ticket detail with comments and history, followers,
+@mentions, parent/child, merge, move, state rules in 6.3.
+
+**Done when:** every row of both tables in 6.3 has a passing test, and the
+auto-fill-user-on-close rule works from the form but not from bulk edit.
+
+| Criterion / rule                                                                                                                                                                            | Test                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Every row of 6.3 table 1 (customer email by state) and table 2 (automatic reopen), plus the no-change list and "manual state wins"                                                          | `packages/domain/src/tickets/state.test.ts` (one test per row)                        |
+| Table rows Phase 2 can drive end-to-end: other user's comment reopens Waiting/Closed; re-open time reopens Waiting/Closed; own/unassigned comments, moves and Archived tickets don't change | `apps/api/test/phase2-acceptance.test.ts`, `e2e/tests/phase2.spec.ts`                 |
+| Auto-fill User on close/archive from the form, not from bulk edit; a macro-set user wins                                                                                                    | `tickets/save-rules.test.ts`, `phase2-acceptance.test.ts`, `e2e/tests/phase2.spec.ts` |
+| Deactivated owner cleared on next save; deactivated users stop following                                                                                                                    | `save-rules.test.ts`, `apps/api/test/tickets.test.ts`                                 |
+| Category settings: status required, multiple statuses, allowed statuses, waiting needs re-open, check children on close/delete, auto-archive                                                | `save-rules.test.ts`, `tickets.test.ts`                                               |
+| Category rights: Access = No → can create but not see; category not in rights → refused                                                                                                     | `tickets/rights` tests in `save-rules.test.ts`, `tickets.test.ts`                     |
+| Comments: sanitised HTML, mentions and followers, author-only edits logged with old/new                                                                                                     | `tickets.test.ts`                                                                     |
+| Merge, parent/child (no cycles, from an activity), move activity                                                                                                                            | `tickets.test.ts`, `phase2-acceptance.test.ts`                                        |
+| Filters, `@me`, search by title/description/comment/#number, team views from rights, My views and sidebar                                                                                   | `tickets.test.ts`, `e2e/tests/phase2.spec.ts`                                         |
+| Optimistic locking (version conflict → 409 with current values)                                                                                                                             | `tickets.test.ts`                                                                     |
+| Contact card with other open tickets                                                                                                                                                        | `tickets.test.ts`                                                                     |
+
+What exists:
+
+- API: `/api/settings/{ticket-statuses,categories,ticket-views}`, `/api/tickets/meta`,
+  `/api/tickets/views` (+ `/sidebar`), `/api/tickets` (list with `viewId`/`q`/`filter`,
+  CRUD, history, snapshot, activities, comments and edits, move, children, follow,
+  favourite), `/api/tickets/bulk-edit`, `/api/tickets/merge`; tickets in global search;
+  re-open and auto-archive jobs (every minute).
+- Web: Tickets menu with a views sidebar (all tickets, My views with reorder/remove, team
+  views with pin, + New view), list with filters, saved filters, columns, bulk edit and
+  merge; ticket detail with header (#ID, copy link, favourite, state, priority, parent,
+  merged-into), activities with rich-text comments, mentions, edit and actions, history
+  interleaved with activities (hide toggle, side-by-side comment diffs, "view form as it
+  was"), form with contact card, category, priority, state, user, deadline, re-open,
+  followers, status(es), description and the category's custom form, layout 2:1/1:1/1:2,
+  "Save ticket & comment"; Settings pages for categories (with form builder), statuses and
+  team views; category Access/limit and team views on rights profiles.
+- Seed: four statuses, Support/Billing/Intake categories (agents can't see Intake), two
+  team views ("My open tickets", "Unassigned"), three tickets.
+
+Deferred to their phases (see `docs/open-questions.md`):
+
+- Presence avatars (5), SLA icons and deadlines (4), suggested-ticket banner, Templates
+  tab and comment attachments (3), iFrame tabs and time tracking/"Sessions view" (later,
+  [SHOULD]), peek panel ([SHOULD]), bulk edit as a background job above 200 (6).
+
 ## Phase 1 — CRM core ✅
 
 Scope (spec 20): CRM databases, custom field pool, form builder, contacts, accounts,

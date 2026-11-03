@@ -45,7 +45,7 @@ test('an agent cannot find contacts in a CRM database outside their rights', asy
   await page.goto('/crm/contacts');
   await page.getByRole('textbox', { name: 'Search…' }).fill('Pat Partner');
   await expect(page.getByText('No results')).toBeVisible();
-  await page.getByRole('textbox', { name: /Search contacts/ }).fill('globex');
+  await page.getByRole('textbox', { name: /Search tickets/ }).fill('globex');
   await expect(page.getByText('No results')).toHaveCount(2);
 });
 

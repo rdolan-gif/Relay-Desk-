@@ -19,7 +19,7 @@ import { contacts, users } from '../db/schema';
 import { conditionToSql, type FilterTarget } from './filter-sql';
 import { formError } from './form-errors';
 
-export const LISTS = ['contacts', 'accounts', 'records'] as const;
+export const LISTS = ['contacts', 'accounts', 'records', 'tickets'] as const;
 export type ListName = (typeof LISTS)[number];
 
 export const listQuerySchema = z.object({
@@ -42,7 +42,7 @@ const conditionSchema = z.array(
 );
 
 /** System filter fields for each list; custom fields are appended as `custom.<id>`. */
-export const SYSTEM_FILTER_FIELDS: Record<ListName, FilterFieldDef[]> = {
+export const SYSTEM_FILTER_FIELDS: Record<Exclude<ListName, 'tickets'>, FilterFieldDef[]> = {
   contacts: [
     { key: 'name', label: 'Name', kind: 'text' },
     { key: 'emails', label: 'Email', kind: 'email_list' },
@@ -71,7 +71,7 @@ export const SYSTEM_FILTER_FIELDS: Record<ListName, FilterFieldDef[]> = {
   ],
 };
 
-export function filterFields(list: ListName, custom: Iterable<CustomFieldDef>): FilterFieldDef[] {
+export function filterFields(list: Exclude<ListName, 'tickets'>, custom: Iterable<CustomFieldDef>): FilterFieldDef[] {
   return [
     ...SYSTEM_FILTER_FIELDS[list],
     ...[...custom].map((f) => ({ key: `custom.${f.id}`, label: f.name, kind: filterKindForFieldType(f.type) })),

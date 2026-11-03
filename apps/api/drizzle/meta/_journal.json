@@ -29,6 +29,13 @@
       "when": 1793726182714,
       "tag": "0003_tickets",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793727094378,
+      "tag": "0004_ticket_rights_upgrade",
+      "breakpoints": true
     }
   ]
 }

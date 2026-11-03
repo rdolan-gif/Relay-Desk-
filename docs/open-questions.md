@@ -60,6 +60,27 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 | Q-P1-14 | Form builder                        | Drag (or keyboard) to reorder sections and fields; fields move between sections with a "Move to section" menu.                                                                                     | Assumed |
 | Q-P1-15 | Contacts without email or phone     | Allowed, but they can never be matched to incoming email (spec 12.3).                                                                                                                              | Assumed |
 
+## Phase 2 decisions
+
+| #       | Topic                         | Decision                                                                                                                                   | Status   |
+| ------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| Q-P2-1  | Merge (S-4)                   | Spec default: merged-away tickets are archived with a link to the survivor; activities and followers move to the survivor; history on all. | Assumed  |
+| Q-P2-2  | Comment attachments           | Arrive in Phase 3 together with email attachments (both need file storage).                                                                | Assumed  |
+| Q-P2-3  | @mentions                     | Picked from a "Mention" list next to the comment box rather than typed inline as "@name".                                                  | Assumed  |
+| Q-P2-4  | Archived tickets              | Automation never changes them (spec 6.3). Staff can still edit them manually, including changing the state back.                           | **Open** |
+| Q-P2-5  | "All categories" in rights    | Means Access = Yes everywhere and no distribution limit. Existing full administrators were upgraded to all categories and team views.      | Assumed  |
+| Q-P2-6  | Hidden-category create        | Creating a ticket in a category with Access = No returns `{ id, visible: false }`; the UI says it was saved but can't be shown.            | Assumed  |
+| Q-P2-7  | closed_at                     | Set when a ticket is closed or archived, cleared when it reopens. Reporting (Phase 7) uses history for first-close times.                  | Assumed  |
+| Q-P2-8  | Scheduled jobs                | Re-open and auto-archive run every minute in the API process; they move to the job queue when email arrives (Phase 3).                     | Assumed  |
+| Q-P2-9  | Bulk edit                     | Up to 200 tickets at once, saved one by one; failures are listed, not fatal. Background jobs above 200 come in Phase 6.                    | Assumed  |
+| Q-P2-10 | Deleting tickets              | Needs both Delete on the Tickets module and the "can delete tickets" flag. Soft delete; recovery screen in Phase 6.                        | Assumed  |
+| Q-P2-11 | Optimistic locking            | Built now (spec lists it under Phase 5): saving an out-of-date ticket returns 409 with the current values and a Reload button.             | Assumed  |
+| Q-P2-12 | My views sidebar              | Reorder with up/down buttons (keyboard friendly); nesting and folders are stored and shown. Drag-and-drop reorder can follow if wanted.    | Assumed  |
+| Q-P2-13 | Child ticket from an activity | The child records the source activity and starts with its text as the description; the activity stays on the parent.                       | Assumed  |
+| Q-P2-14 | Ticket list order             | Newest first by default.                                                                                                                   | Assumed  |
+| Q-P2-15 | Date-time inputs              | Use the browser's own picker, which follows the computer's regional settings (DD/MM/YYYY on UK-configured machines).                       | Assumed  |
+| Q-P2-16 | "Sessions view" in History    | Comes with time tracking (spec 6.5, [SHOULD]); "Hide activities" is built.                                                                 | Assumed  |
+
 ## Questions for the owner — 04/11/2026, 08:00
 
 1. **Click to email.** You chose copy buttons. Should email addresses also open your mail
@@ -77,3 +98,9 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 7. **Customer portal (S-8).** Needed in v1, or later?
 8. **Email routing (S-3, Phase 3).** When several routing rules match an email, should only the
    first apply, or all of them in order?
+9. **Archived tickets (Q-P2-4).** Should Archived tickets be fully read-only for staff, or can
+   they still be edited (e.g. moved back to Open by hand)?
+10. **Mentions (Q-P2-3).** Is picking people from a "Mention" list next to the comment box
+    fine, or do you want inline "@name" autocomplete while typing?
+11. **Ticket categories and SLAs (Phase 4 prep).** What response and resolution times do you
+    promise customers, per priority, and what are your working hours and holidays?

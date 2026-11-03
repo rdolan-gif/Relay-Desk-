@@ -129,6 +129,12 @@ export function UserPicker(props: PickerProps) {
   );
 }
 
+/**
+ * One label per contact: the select syncs its search text to the selected label, so a
+ * label that changed between queries would trigger an endless search loop.
+ */
+const contactLabel = (c: Contact) => `${c.name}${c.emails[0] ? ` (${c.emails[0]})` : ''}`;
+
 /** Searches visible contacts as you type. */
 export function ContactPicker(props: PickerProps & { databaseId?: string }) {
   const [search, setSearch] = useState('');
@@ -140,11 +146,11 @@ export function ContactPicker(props: PickerProps & { databaseId?: string }) {
   const results = useQuery({
     queryKey: ['contact-search', search],
     queryFn: () => api<Page<Contact>>('GET', `/crm/contacts${qs({ q: search, pageSize: 20 })}`),
-    enabled: search.length >= 2,
+    enabled: search.length >= 2 && !(current.data && search === contactLabel(current.data)),
   });
   const data = new Map<string, string>();
-  if (current.data) data.set(current.data.id, current.data.name);
-  for (const c of results.data?.items ?? []) data.set(c.id, `${c.name}${c.emails[0] ? ` (${c.emails[0]})` : ''}`);
+  if (current.data) data.set(current.data.id, contactLabel(current.data));
+  for (const c of results.data?.items ?? []) data.set(c.id, contactLabel(c));
   return (
     <Select
       {...props}
