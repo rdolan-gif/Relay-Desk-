@@ -4,6 +4,8 @@ import { normaliseAccessProfile, type Principal, type RightsProfile } from '@rel
 import { DB, type Db, type DbOrTx } from '../db/db';
 import {
   accessProfiles,
+  rightsProfileCrmDatabases,
+  rightsProfileCrmRecordTypes,
   rightsProfileEditableAccessProfiles,
   rightsProfileEditableRightsProfiles,
   rightsProfileVisibleUsers,
@@ -18,6 +20,8 @@ const NO_RIGHTS: RightsProfile = {
   visibleUserIds: [],
   editableAccessProfiles: [],
   editableRightsProfiles: [],
+  crmDatabases: [],
+  crmRecordTypes: [],
 };
 
 /**
@@ -83,7 +87,21 @@ export class PermissionsService {
           .select({ id: rightsProfileEditableRightsProfiles.editableRightsProfileId })
           .from(rightsProfileEditableRightsProfiles)
           .where(eq(rightsProfileEditableRightsProfiles.rightsProfileId, rp.id));
+    const crmDbs = rp.allCrmDatabases
+      ? []
+      : await tx
+          .select({ id: rightsProfileCrmDatabases.crmDatabaseId })
+          .from(rightsProfileCrmDatabases)
+          .where(eq(rightsProfileCrmDatabases.rightsProfileId, rp.id));
+    const crmTypes = rp.allCrmRecordTypes
+      ? []
+      : await tx
+          .select({ id: rightsProfileCrmRecordTypes.crmRecordTypeId })
+          .from(rightsProfileCrmRecordTypes)
+          .where(eq(rightsProfileCrmRecordTypes.rightsProfileId, rp.id));
     return {
+      crmDatabases: rp.allCrmDatabases ? 'all' : crmDbs.map((r) => r.id),
+      crmRecordTypes: rp.allCrmRecordTypes ? 'all' : crmTypes.map((r) => r.id),
       userVisibility: rp.userVisibility,
       visibleUserIds: visible.map((r) => r.id),
       editableAccessProfiles: rp.editAllAccessProfiles ? 'all' : editableAp.map((r) => r.id),

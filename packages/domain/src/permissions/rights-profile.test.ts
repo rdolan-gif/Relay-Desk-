@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canSeeCrmDatabase,
+  canSeeRecordType,
+  crmDatabaseScope,
   canCreateProfiles,
   canManageAccessProfile,
   canManageRightsProfile,
@@ -13,12 +16,16 @@ const restricted: RightsProfile = {
   visibleUserIds: ['b'],
   editableAccessProfiles: ['ap-agent'],
   editableRightsProfiles: ['rp-agent'],
+  crmDatabases: ['db-1'],
+  crmRecordTypes: [],
 };
 const full: RightsProfile = {
   userVisibility: 'all',
   visibleUserIds: [],
   editableAccessProfiles: 'all',
   editableRightsProfiles: 'all',
+  crmDatabases: 'all',
+  crmRecordTypes: 'all',
 };
 
 describe('rights: user visibility (spec 4)', () => {
@@ -54,5 +61,21 @@ describe('rights: profile editing prevents privilege escalation (spec 4)', () =>
   it('only admins with "all" editable profiles can create new profiles', () => {
     expect(canCreateProfiles(restricted, 'access')).toBe(false);
     expect(canCreateProfiles(full, 'rights')).toBe(true);
+  });
+});
+
+describe('rights: CRM databases and record types (spec 4, 12)', () => {
+  it('when a CRM database is not in the rights, the user cannot see it', () => {
+    expect(canSeeCrmDatabase(restricted, 'db-1')).toBe(true);
+    expect(canSeeCrmDatabase(restricted, 'db-2')).toBe(false);
+    expect(crmDatabaseScope(restricted)).toEqual({ all: false, ids: ['db-1'] });
+  });
+  it('when rights grant all CRM databases, every database is visible', () => {
+    expect(canSeeCrmDatabase(full, 'anything')).toBe(true);
+    expect(crmDatabaseScope(full)).toEqual({ all: true });
+  });
+  it('when a record type is not in the rights, its records are not visible', () => {
+    expect(canSeeRecordType(restricted, 'deal')).toBe(false);
+    expect(canSeeRecordType(full, 'deal')).toBe(true);
   });
 });

@@ -17,6 +17,23 @@ import { AccessProfilesController, RightsProfilesController } from './profiles/p
 import { ProfilesService } from './profiles/profiles.service';
 import { UsersController } from './users/users.controller';
 import { UsersService } from './users/users.service';
+import { AccountsService } from './crm/accounts.service';
+import { ContactsService } from './crm/contacts.service';
+import {
+  AccountsController,
+  ContactsController,
+  CrmMetaController,
+  ListSettingsController,
+  RecordsController,
+} from './crm/crm.controller';
+import { CrmDatabasesController, CustomFieldsController, RecordTypesController } from './crm/crm-settings.controller';
+import { CrmSettingsService } from './crm/crm-settings.service';
+import { CustomFieldsService } from './crm/custom-fields.service';
+import { ListSettingsService } from './crm/list-settings.service';
+import { RecordsService } from './crm/records.service';
+import { HistoryService } from './history/history.service';
+import { SearchController } from './search/search.controller';
+import { SearchService } from './search/search.service';
 
 class PoolCloser implements OnApplicationShutdown {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
@@ -41,6 +58,15 @@ export class AppModule {
         AccessProfilesController,
         RightsProfilesController,
         AuditController,
+        CustomFieldsController,
+        CrmDatabasesController,
+        RecordTypesController,
+        CrmMetaController,
+        ContactsController,
+        AccountsController,
+        RecordsController,
+        ListSettingsController,
+        SearchController,
       ],
       providers: [
         { provide: CONFIG, useValue: config },
@@ -55,6 +81,14 @@ export class AppModule {
         AuthService,
         ProfilesService,
         UsersService,
+        HistoryService,
+        CustomFieldsService,
+        CrmSettingsService,
+        ContactsService,
+        AccountsService,
+        RecordsService,
+        ListSettingsService,
+        SearchService,
         { provide: APP_GUARD, useClass: AuthGuard },
       ],
     };

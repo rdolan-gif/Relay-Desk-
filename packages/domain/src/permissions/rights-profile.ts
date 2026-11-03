@@ -12,6 +12,38 @@ export interface RightsProfile {
   editableAccessProfiles: 'all' | readonly string[];
   /** Which rights profiles the holder may edit or assign to users. */
   editableRightsProfiles: 'all' | readonly string[];
+  /** CRM databases whose contacts and accounts the holder sees (spec 4, 12.1). */
+  crmDatabases: 'all' | readonly string[];
+  /** CRM record types whose records the holder sees (spec 4, 12.2). */
+  crmRecordTypes: 'all' | readonly string[];
+}
+
+/** Scope of a list of ids: everything, or only these. */
+export type IdScope = { all: true } | { all: false; ids: readonly string[] };
+
+function scope(value: 'all' | readonly string[]): IdScope {
+  return value === 'all' ? { all: true } : { all: false, ids: value };
+}
+
+/**
+ * When a user lists, searches or opens contacts or accounts, the system returns only
+ * those in CRM databases in their rights (spec 4, "Rules").
+ */
+export function canSeeCrmDatabase(rights: RightsProfile, databaseId: string): boolean {
+  return rights.crmDatabases === 'all' || rights.crmDatabases.includes(databaseId);
+}
+
+export function crmDatabaseScope(rights: RightsProfile): IdScope {
+  return scope(rights.crmDatabases);
+}
+
+/** When a user lists, searches or opens CRM records, only types in their rights are returned. */
+export function canSeeRecordType(rights: RightsProfile, recordTypeId: string): boolean {
+  return rights.crmRecordTypes === 'all' || rights.crmRecordTypes.includes(recordTypeId);
+}
+
+export function recordTypeScope(rights: RightsProfile): IdScope {
+  return scope(rights.crmRecordTypes);
 }
 
 export function canSeeUser(rights: RightsProfile, selfId: string, otherId: string): boolean {

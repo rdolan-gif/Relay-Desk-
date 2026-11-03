@@ -22,7 +22,9 @@ export async function createTestContext(): Promise<TestContext> {
   const pool = createPool(TEST_DATABASE_URL);
   const db = createDb(pool);
   await db.execute(sql`
-    TRUNCATE audit_log, login_attempts, sessions, rights_profile_visible_users,
+    TRUNCATE history_entries, filter_schemes, list_preferences, crm_records, contacts, accounts,
+      rights_profile_crm_databases, rights_profile_crm_record_types, crm_record_types, crm_databases,
+      custom_fields, audit_log, login_attempts, sessions, rights_profile_visible_users,
       rights_profile_editable_access_profiles, rights_profile_editable_rights_profiles,
       users, access_profiles, rights_profiles RESTART IDENTITY CASCADE
   `);

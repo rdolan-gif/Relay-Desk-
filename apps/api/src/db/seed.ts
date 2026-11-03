@@ -2,7 +2,19 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { fullAccessProfile, normaliseAccessProfile, type AccessProfile, type UserType } from '@relay-desk/domain';
 import { PasswordService } from '../auth/password.service';
 import { createDb, createPool, type Db } from './db';
-import { accessProfiles, rightsProfiles, users } from './schema';
+import {
+  accessProfiles,
+  accounts,
+  contacts,
+  crmDatabases,
+  crmRecordTypes,
+  crmRecords,
+  customFields,
+  rightsProfileCrmDatabases,
+  rightsProfiles,
+  users,
+} from './schema';
+import type { FieldOption, FieldType, FormLayout } from '@relay-desk/domain';
 
 /** Development-only default; override with SEED_PASSWORD. Never used in production. */
 export const DEFAULT_SEED_PASSWORD = 'harbour-lantern-violet-42';
@@ -61,8 +73,20 @@ export async function seed(db: Db, password = process.env.SEED_PASSWORD ?? DEFAU
 
   const rp: Record<string, string> = {};
   const rights = {
-    Administrator: { userVisibility: 'all' as const, editAllAccessProfiles: true, editAllRightsProfiles: true },
-    'Standard agent': { userVisibility: 'all' as const, editAllAccessProfiles: false, editAllRightsProfiles: false },
+    Administrator: {
+      userVisibility: 'all' as const,
+      editAllAccessProfiles: true,
+      editAllRightsProfiles: true,
+      allCrmDatabases: true,
+      allCrmRecordTypes: true,
+    },
+    'Standard agent': {
+      userVisibility: 'all' as const,
+      editAllAccessProfiles: false,
+      editAllRightsProfiles: false,
+      allCrmDatabases: false,
+      allCrmRecordTypes: true,
+    },
   };
   for (const [name, values] of Object.entries(rights)) {
     const [existing] = await db
@@ -113,7 +137,156 @@ export async function seed(db: Db, password = process.env.SEED_PASSWORD ?? DEFAU
       rightsProfileId: rp[u.rights]!,
     });
   }
-  return { accessProfiles: ap, rightsProfiles: rp };
+  const crm = await seedCrm(db, rp['Standard agent']!);
+  return { accessProfiles: ap, rightsProfiles: rp, crm };
+}
+
+/**
+ * CRM demo data: a default "Customers" database agents can see and a "Partners"
+ * database only administrators can see.
+ */
+async function seedCrm(db: Db, standardAgentRightsId: string) {
+  const field = async (key: string, name: string, type: FieldType, options: FieldOption[] = []) => {
+    const [existing] = await db.select().from(customFields).where(eq(customFields.key, key));
+    return existing?.id ?? (await db.insert(customFields).values({ key, name, type, options }).returning())[0]!.id;
+  };
+  const opt = (...labels: string[]) => labels.map((label, i) => ({ value: label.toLowerCase(), label, sort: i + 1 }));
+  const f = {
+    customerType: await field('customer_type', 'Customer type', 'radio', opt('Business', 'Individual')),
+    vatNumber: await field('vat_number', 'VAT number', 'text'),
+    tier: await field('tier', 'Tier', 'select', opt('Gold', 'Silver', 'Bronze')),
+    notes: await field('notes', 'Notes', 'textarea'),
+    dealValue: await field('deal_value', 'Deal value (£)', 'number'),
+    closeDate: await field('close_date', 'Expected close date', 'date'),
+  };
+  const contactLayout: FormLayout = {
+    sections: [
+      {
+        id: 'details',
+        title: 'Details',
+        fields: [
+          { fieldId: f.customerType, required: true },
+          {
+            fieldId: f.vatNumber,
+            visibleWhen: { fieldId: f.customerType, equals: 'business' },
+            tooltip: 'UK VAT registration number',
+          },
+          { fieldId: f.tier },
+        ],
+      },
+      { id: 'notes', title: 'Notes', collapsed: true, fields: [{ fieldId: f.notes, rows: 4 }] },
+    ],
+  };
+  const accountLayout: FormLayout = {
+    sections: [{ id: 'account', title: 'Account', fields: [{ fieldId: f.tier }, { fieldId: f.notes, rows: 3 }] }],
+  };
+
+  const database = async (title: string, isDefault: boolean) => {
+    const [existing] = await db
+      .select()
+      .from(crmDatabases)
+      .where(and(eq(crmDatabases.title, title), isNull(crmDatabases.deletedAt)));
+    return (
+      existing?.id ??
+      (
+        await db
+          .insert(crmDatabases)
+          .values({ title, isDefault, contactFormLayout: contactLayout, accountFormLayout: accountLayout })
+          .returning()
+      )[0]!.id
+    );
+  };
+  const customersDb = await database('Customers', true);
+  const partnersDb = await database('Partners', false);
+  await db
+    .insert(rightsProfileCrmDatabases)
+    .values({ rightsProfileId: standardAgentRightsId, crmDatabaseId: customersDb })
+    .onConflictDoNothing();
+
+  const [existingType] = await db.select().from(crmRecordTypes).where(eq(crmRecordTypes.title, 'Deal'));
+  const dealType =
+    existingType?.id ??
+    (
+      await db
+        .insert(crmRecordTypes)
+        .values({
+          title: 'Deal',
+          statuses: [
+            { key: 'new', title: 'New' },
+            { key: 'qualified', title: 'Qualified' },
+            { key: 'won', title: 'Won' },
+            { key: 'lost', title: 'Lost' },
+          ],
+          formLayout: {
+            sections: [{ id: 'deal', title: 'Deal', fields: [{ fieldId: f.dealValue }, { fieldId: f.closeDate }] }],
+          },
+        })
+        .returning()
+    )[0]!.id;
+
+  const account = async (databaseId: string, name: string, custom: Record<string, unknown>) => {
+    const [existing] = await db
+      .select()
+      .from(accounts)
+      .where(and(eq(accounts.name, name), eq(accounts.databaseId, databaseId)));
+    return (
+      existing?.id ?? (await db.insert(accounts).values({ databaseId, name, customFields: custom }).returning())[0]!.id
+    );
+  };
+  const acme = await account(customersDb, 'Acme Supplies Ltd', { [f.tier]: 'gold' });
+  const globex = await account(partnersDb, 'Globex Partners', {});
+
+  const contact = async (
+    databaseId: string,
+    name: string,
+    emails: string[],
+    phones: string[],
+    accountId: string | null,
+    custom: Record<string, unknown>,
+  ) => {
+    const [existing] = await db
+      .select()
+      .from(contacts)
+      .where(and(eq(contacts.name, name), eq(contacts.databaseId, databaseId)));
+    return (
+      existing?.id ??
+      (
+        await db
+          .insert(contacts)
+          .values({ databaseId, name, emails, phones, accountId, customFields: custom })
+          .returning()
+      )[0]!.id
+    );
+  };
+  const sam = await contact(
+    customersDb,
+    'Sam Smith',
+    ['sam@acme.example', 'sam.smith@gmail.example'],
+    ['+447911123456'],
+    acme,
+    {
+      [f.customerType]: 'business',
+      [f.vatNumber]: 'GB123456789',
+      [f.tier]: 'gold',
+    },
+  );
+  await contact(customersDb, 'Priya Patel', ['priya.patel@example.co.uk'], ['+442079460958'], null, {
+    [f.customerType]: 'individual',
+  });
+  await contact(partnersDb, 'Pat Partner', ['pat@globex.example'], [], globex, {});
+
+  const [existingDeal] = await db.select().from(crmRecords).where(eq(crmRecords.title, 'Acme renewal 2027'));
+  if (!existingDeal) {
+    await db.insert(crmRecords).values({
+      recordTypeId: dealType,
+      title: 'Acme renewal 2027',
+      status: 'qualified',
+      contactId: sam,
+      accountId: acme,
+      customFields: { [f.dealValue]: 12000, [f.closeDate]: '2027-01-31' },
+    });
+  }
+  return { customersDb, partnersDb, dealType, fields: f };
 }
 
 if (require.main === module) {

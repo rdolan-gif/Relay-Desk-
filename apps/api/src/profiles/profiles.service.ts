@@ -16,6 +16,10 @@ import type { AuthContext } from '../common/request-context';
 import { DB, type Db, type DbOrTx } from '../db/db';
 import {
   accessProfiles,
+  crmDatabases,
+  crmRecordTypes,
+  rightsProfileCrmDatabases,
+  rightsProfileCrmRecordTypes,
   rightsProfileEditableAccessProfiles,
   rightsProfileEditableRightsProfiles,
   rightsProfileVisibleUsers,
@@ -38,6 +42,8 @@ export interface RightsProfileInput {
   visibleUserIds: string[];
   editableAccessProfiles: 'all' | string[];
   editableRightsProfiles: 'all' | string[];
+  crmDatabases: 'all' | string[];
+  crmRecordTypes: 'all' | string[];
 }
 
 const forbidden = (message: string, reason: string) => new ForbiddenException({ message, reason });
@@ -195,6 +201,8 @@ export class ProfilesService {
             userVisibility: input.userVisibility,
             editAllAccessProfiles: input.editableAccessProfiles === 'all',
             editAllRightsProfiles: input.editableRightsProfiles === 'all',
+            allCrmDatabases: input.crmDatabases === 'all',
+            allCrmRecordTypes: input.crmRecordTypes === 'all',
           })
           .returning();
         await this.writeRightsLinks(tx, row!.id, input);
@@ -229,6 +237,8 @@ export class ProfilesService {
             userVisibility: input.userVisibility,
             editAllAccessProfiles: input.editableAccessProfiles === 'all',
             editAllRightsProfiles: input.editableRightsProfiles === 'all',
+            allCrmDatabases: input.crmDatabases === 'all',
+            allCrmRecordTypes: input.crmRecordTypes === 'all',
             updatedAt: new Date(),
           })
           .where(eq(rightsProfiles.id, id))
@@ -298,6 +308,17 @@ export class ProfilesService {
     };
     check('access', input.editableAccessProfiles);
     check('rights', input.editableRightsProfiles);
+    // Data scopes can only be delegated from what the actor can see.
+    const checkScope = (label: string, mine: 'all' | readonly string[], wanted: 'all' | string[]) => {
+      if (mine === 'all') return;
+      if (wanted === 'all' || wanted.some((id) => !mine.includes(id))) {
+        throw forbidden(`You cannot grant ${label} you cannot see yourself.`, 'privilege_escalation');
+      }
+    };
+    checkScope('CRM databases', auth.rights.crmDatabases, input.crmDatabases);
+    checkScope('CRM record types', auth.rights.crmRecordTypes, input.crmRecordTypes);
+    await this.assertExist(crmDatabases, input.crmDatabases, 'CRM database');
+    await this.assertExist(crmRecordTypes, input.crmRecordTypes, 'CRM record type');
 
     await this.assertExist(accessProfiles, input.editableAccessProfiles, 'access profile');
     await this.assertExist(rightsProfiles, input.editableRightsProfiles, 'rights profile');
@@ -310,7 +331,7 @@ export class ProfilesService {
   }
 
   private async assertExist(
-    table: typeof accessProfiles | typeof rightsProfiles,
+    table: typeof accessProfiles | typeof rightsProfiles | typeof crmDatabases | typeof crmRecordTypes,
     ids: 'all' | string[],
     label: string,
   ) {
@@ -333,6 +354,20 @@ export class ProfilesService {
       await tx
         .delete(rightsProfileEditableRightsProfiles)
         .where(eq(rightsProfileEditableRightsProfiles.rightsProfileId, id));
+      await tx.delete(rightsProfileCrmDatabases).where(eq(rightsProfileCrmDatabases.rightsProfileId, id));
+      await tx.delete(rightsProfileCrmRecordTypes).where(eq(rightsProfileCrmRecordTypes.rightsProfileId, id));
+    }
+    if (input.crmDatabases !== 'all' && input.crmDatabases.length) {
+      await tx
+        .insert(rightsProfileCrmDatabases)
+        .values([...new Set(input.crmDatabases)].map((crmDatabaseId) => ({ rightsProfileId: id, crmDatabaseId })));
+    }
+    if (input.crmRecordTypes !== 'all' && input.crmRecordTypes.length) {
+      await tx
+        .insert(rightsProfileCrmRecordTypes)
+        .values(
+          [...new Set(input.crmRecordTypes)].map((crmRecordTypeId) => ({ rightsProfileId: id, crmRecordTypeId })),
+        );
     }
     const visible = [...new Set(input.visibleUserIds)];
     if (input.userVisibility === 'selected' && visible.length) {
@@ -368,6 +403,8 @@ export class ProfilesService {
         rights?.editableAccessProfiles === 'all' ? 'all' : [...(rights?.editableAccessProfiles ?? [])].sort(),
       editableRightsProfiles:
         rights?.editableRightsProfiles === 'all' ? 'all' : [...(rights?.editableRightsProfiles ?? [])].sort(),
+      crmDatabases: rights?.crmDatabases === 'all' ? 'all' : [...(rights?.crmDatabases ?? [])].sort(),
+      crmRecordTypes: rights?.crmRecordTypes === 'all' ? 'all' : [...(rights?.crmRecordTypes ?? [])].sort(),
     };
   }
 }

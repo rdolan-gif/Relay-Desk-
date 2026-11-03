@@ -31,6 +31,8 @@ const rightsSchema = z.object({
   visibleUserIds: idList.default([]),
   editableAccessProfiles: z.union([z.literal('all'), idList]).default([]),
   editableRightsProfiles: z.union([z.literal('all'), idList]).default([]),
+  crmDatabases: z.union([z.literal('all'), idList]).default([]),
+  crmRecordTypes: z.union([z.literal('all'), idList]).default([]),
 });
 
 @ApiTags('settings')
