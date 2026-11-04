@@ -256,7 +256,14 @@ export function TicketsPage() {
           filterChoices={choices}
           onOpen={(r) => nav(`/tickets/${r.id}`)}
           actions={
-            can('tickets', 'create') && <Button onClick={() => nav('/tickets/new')}>{t.tickets.newTicket}</Button>
+            can('tickets', 'create') && (
+              <Group>
+                <Button variant="default" onClick={() => nav('/email/new')}>
+                  {t.email.newEmail}
+                </Button>
+                <Button onClick={() => nav('/tickets/new')}>{t.tickets.newTicket}</Button>
+              </Group>
+            )
           }
           bulkActions={
             meta.data.can.bulkEdit || meta.data.can.merge

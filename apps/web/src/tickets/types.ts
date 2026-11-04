@@ -49,6 +49,8 @@ export interface Ticket {
   version: number;
   createdAt: string;
   lastActivityAt: string;
+  firstAnswerAt?: string | null;
+  noReplyNeeded?: boolean;
   categoryTitle?: string;
   userName?: string | null;
   contactName?: string | null;
@@ -90,9 +92,31 @@ export interface TicketDetail extends Ticket {
   merges: { id: number; mergedId: number; title: string; createdAt: string }[];
 }
 
+export interface MailAddress {
+  name?: string;
+  address: string;
+}
+
 export interface Activity {
   id: string;
   type: 'comment' | 'email';
+  direction: 'in' | 'out' | 'internal';
+  status: string;
+  error: string | null;
+  isAutomatic: boolean;
+  suggestedTicketIds: number[];
+  repliedToActivityId?: string | null;
+  email: {
+    queueId: string | null;
+    from: MailAddress;
+    to: MailAddress[];
+    cc: MailAddress[];
+    bcc: MailAddress[];
+    replyTo: MailAddress[];
+    subject: string;
+    classification: string;
+  } | null;
+  attachments: { id: string; filename: string; mime: string; size: number; inline: boolean }[];
   userId: string | null;
   userName: string | null;
   isExternal: boolean;

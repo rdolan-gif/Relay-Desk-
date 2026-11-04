@@ -49,6 +49,7 @@ export interface RightsProfileDto {
   crmRecordTypes: 'all' | string[];
   categories: 'all' | { categoryId: string; access: boolean; distributionLimit: number | null }[];
   ticketViews: 'all' | string[];
+  mailboxes: 'all' | string[];
 }
 
 export interface AuditEntry {

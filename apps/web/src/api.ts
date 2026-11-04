@@ -35,3 +35,18 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
   if (!res.ok) throw new ApiError(res.status, data);
   return data as T;
 }
+
+/** Multipart upload (for email attachments). */
+export async function apiUpload<T>(path: string, file: File): Promise<T> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`/api${path}`, {
+    method: 'POST',
+    headers: csrfToken ? { 'x-csrf-token': csrfToken } : {},
+    credentials: 'same-origin',
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, data);
+  return data as T;
+}

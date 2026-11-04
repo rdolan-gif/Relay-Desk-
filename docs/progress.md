@@ -10,6 +10,62 @@
 | Company › Branch › Branch number with phones, emails and addresses; branch card on tickets; branch and company ticket lists | `packages/domain/src/crm/accounts.test.ts`, `apps/api/test/branches.test.ts`           |
 | Support team structure (categories, rights, views)                                                                          | `pnpm db:setup:support` (add `-- --demo` for demo users and data)                      |
 
+## Phase 3 — Email channel ✅
+
+Scope (spec 20): mailbox queues, inbound pipeline, threading, contact matching, composing,
+replies, templates, auto-responses, outbound-creates-ticket, routing rules. Gmail through the
+free Gmail API (owner O-2, O-10).
+
+**Done when:** a reply with a changed subject threads to the right ticket; a reply to an
+Archived ticket creates a new one; a no-reply sender routes to _Do not reply_; an auto-reply
+never triggers our auto-response.
+
+| Criterion / rule                                                                                         | Test                                                                           |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| A reply with a changed subject threads by its headers to the right ticket                                | `apps/api/test/phase3-acceptance.test.ts`, `packages/domain/src/email.test.ts` |
+| A reply to an Archived ticket creates a new ticket                                                       | `phase3-acceptance.test.ts`, `email.test.ts` (domain)                          |
+| A no-reply sender routes to _Do not reply_                                                               | `phase3-acceptance.test.ts`                                                    |
+| An auto-reply never triggers our auto-response; "only for new tickets" and on/off respected              | `phase3-acceptance.test.ts`, `email.test.ts` (domain)                          |
+| Each email is processed once; our own mail is dropped as a loop; bounces mark the sent email Failed      | `apps/api/test/email.test.ts`                                                  |
+| Several header matches: newest ticket wins, others suggested; `[#123]` token fallback; merged → survivor | `email.test.ts` (API and domain)                                               |
+| Sender matched to a contact in the mailbox's CRM databases; customer email reopens Waiting               | `email.test.ts`                                                                |
+| HTML sanitised; attachments stored, downloadable and attachable (uploader only, 25 MB per email)         | `email.test.ts`                                                                |
+| Reply / Reply all / Forward with threading headers and the ticket token; first agent reply recorded      | `email.test.ts`, `e2e/tests/phase3.spec.ts`                                    |
+| A new email creates a ticket (Closed, Low, sender as User, matched contact)                              | `email.test.ts`, `e2e/tests/phase3.spec.ts`                                    |
+| Failed sends are kept and marked Failed with the reason                                                  | `email.test.ts`                                                                |
+| Mailbox rights; back-office users cannot send                                                            | `email.test.ts`                                                                |
+| Routing: all matching rules apply in order, later wins; all/any groups; invalid patterns refused         | `email.test.ts` (API and domain)                                               |
+| Enquiry type set by rules: purchase order / quotation (owner O-11)                                       | `email.test.ts`                                                                |
+| Templates by agents with placeholders; signatures (owner O-6, O-7)                                       | `email.test.ts` (API and domain)                                               |
+| "FYI – no reply needed" closes with the FYI status (owner O-12)                                          | `email.test.ts`                                                                |
+| Gmail OAuth: forged state refused, wrong account refused, credentials never returned                     | `email.test.ts`, `apps/api/src/email/gmail.provider.test.ts`                   |
+| Pasted or malformed recipient addresses are refused                                                      | `packages/domain/src/crm/identifiers.test.ts`                                  |
+| UI: new email → ticket → reply; Mailboxes and Email routing settings                                     | `e2e/tests/phase3.spec.ts`                                                     |
+
+What exists:
+
+- API: `/api/settings/mailboxes` (CRUD, `connect`, `disconnect`, `sync`, `log`),
+  `/api/oauth/google/callback`, `/api/settings/email-routing` (CRUD, `PUT order`),
+  `/api/templates` (CRUD, `render`), `/api/mailboxes` (mine), `/api/emails` (send),
+  `/api/attachments` (upload/download), `/api/tickets/:id/fyi`,
+  `/api/tickets/:id/merges/:mergeId/undo`. Mail is checked every `MAIL_POLL_SECONDS` (60).
+- Web: emails on the ticket (sandboxed body, attachments, Reply / Reply all / Forward),
+  composer (From, To/Cc/Bcc, subject, signature, quoted text, templates, attachments,
+  "Save & send email"), suggested-ticket banner with "Move to #id", FYI button, New email
+  from the ticket list, Email templates page for agents, Settings › Mailboxes (Connect Gmail,
+  status, check now, log), Settings › Email routing (ordered rules, condition and action
+  editor), mailboxes on rights profiles.
+- Seed: a demo mailbox `support@relaydesk.local` (fake provider), FYI status, _Do not reply_
+  category, Enquiry type field and rules. `pnpm db:setup:support` adds the four Ricoman Gmail
+  inboxes. Google setup: `docs/setup/gmail.md`.
+
+Deferred, deliberately:
+
+- Reply targets (2/4/8 working hours by enquiry type) are Phase 4 (SLA).
+- Contact/account custom-field conditions in the routing editor UI (supported by the API).
+- Gmail push notifications (Pub/Sub) instead of polling; polling every minute is free and enough
+  for 20–30 emails a day.
+
 ## Phase 2 — Tickets without email ✅
 
 Scope (spec 20): categories (all settings in 7.1), statuses, priorities, ticket CRUD, list,

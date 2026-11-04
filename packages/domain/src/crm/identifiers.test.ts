@@ -15,6 +15,14 @@ describe('contact identifier normalisation (spec 12.3)', () => {
     expect(normaliseEmailAddress('jane@')).toMatchObject({ ok: false });
     expect(normaliseEmailAddress('no at sign')).toMatchObject({ ok: false });
   });
+  it('when an address carries a pasted separator or a bad domain, the system rejects it', () => {
+    for (const bad of ['buyer@example.com,', 'a@b.com;', 'Name <a@b.com>', 'a@-b.com', 'a@b.c', 'a@b..com']) {
+      expect(normaliseEmailAddress(bad).ok, bad).toBe(false);
+    }
+    for (const good of ['first.last+tag@ricoman.com', "o'brien@sub.example.co.uk", 'x@xn--bcher-kva.example']) {
+      expect(normaliseEmailAddress(good).ok, good).toBe(true);
+    }
+  });
   it('when a UK number is saved without a country code, the system stores it in E.164 with +44', () => {
     expect(normalisePhone('020 7946 0958')).toEqual({ ok: true, value: '+442079460958' });
     expect(normalisePhone('07911 123456')).toEqual({ ok: true, value: '+447911123456' });

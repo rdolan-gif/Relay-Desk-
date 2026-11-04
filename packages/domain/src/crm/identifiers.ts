@@ -5,7 +5,11 @@ export const DEFAULT_PHONE_REGION: CountryCode = 'GB';
 
 export type NormaliseResult = { ok: true; value: string } | { ok: false; error: string };
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/**
+ * A practical address check: no spaces or list separators (a pasted "a@b.com," is rejected),
+ * and a domain made of DNS labels ending in a real-looking top-level domain.
+ */
+const EMAIL_RE = /^[^\s@,;<>()[\]\\"]+@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62}$/;
 
 /** When an email is saved, the system lower-cases and trims it (spec 12.3). */
 export function normaliseEmailAddress(raw: string): NormaliseResult {

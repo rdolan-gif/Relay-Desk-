@@ -34,6 +34,10 @@ import { TicketPage } from './pages/tickets/TicketPage';
 import { TicketsPage } from './pages/tickets/TicketsPage';
 import { CategoriesPage, StatusesPage, TeamViewsPage } from './pages/settings/TicketSettingsPages';
 import { CustomFieldsPage } from './pages/settings/CustomFieldsPage';
+import { MailboxesPage } from './pages/email/MailboxesPage';
+import { NewEmailPage } from './pages/email/NewEmailPage';
+import { RoutingRulesPage } from './pages/email/RoutingRulesPage';
+import { TemplatesPage } from './pages/email/TemplatesPage';
 import { CrmDatabasesPage, RecordTypesPage } from './pages/settings/CrmDatabasesPage';
 
 export function App() {
@@ -77,6 +81,8 @@ function Shell() {
     { to: '/settings/categories', label: t.nav.categories, module: 'settings_categories' as const },
     { to: '/settings/statuses', label: t.nav.statuses, module: 'settings_statuses' as const },
     { to: '/settings/ticket-views', label: t.nav.ticketViews, module: 'settings_ticket_views' as const },
+    { to: '/settings/mailboxes', label: t.nav.mailboxes, module: 'settings_mailbox_queues' as const },
+    { to: '/settings/email-routing', label: t.nav.emailRouting, module: 'settings_email_routing' as const },
     { to: '/settings/custom-fields', label: t.nav.customFields, module: 'settings_custom_fields' as const },
     { to: '/settings/crm-databases', label: t.nav.crmDatabases, module: 'settings_crm_databases' as const },
     { to: '/settings/crm-record-types', label: t.nav.recordTypes, module: 'settings_crm_record_types' as const },
@@ -129,6 +135,14 @@ function Shell() {
             active={location.pathname.startsWith('/tickets')}
           />
         )}
+        {can('tickets', 'read') && (
+          <NavLink
+            component={RouterLink}
+            to="/templates"
+            label={t.nav.templates}
+            active={location.pathname === '/templates'}
+          />
+        )}
         {crmLinks.length > 0 && (
           <NavLink label={t.nav.crm} defaultOpened>
             {crmLinks.map((l) => (
@@ -172,6 +186,10 @@ function Shell() {
           <Route path="/settings/ticket-views" element={<TeamViewsPage />} />
           <Route path="/tickets" element={<TicketsPage />} />
           <Route path="/tickets/:id" element={<TicketPage />} />
+          <Route path="/email/new" element={<NewEmailPage />} />
+          <Route path="/templates" element={<TemplatesPage />} />
+          <Route path="/settings/mailboxes" element={<MailboxesPage />} />
+          <Route path="/settings/email-routing" element={<RoutingRulesPage />} />
           <Route path="/settings/crm-databases" element={<CrmDatabasesPage />} />
           <Route path="/settings/crm-record-types" element={<RecordTypesPage />} />
           <Route path="/crm/contacts" element={<ContactsPage />} />

@@ -61,7 +61,20 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
     await status('FYI – no reply needed', 'gray'),
   ];
   const enquiryType = await enquiryTypeField(db);
-  const enquiryLayout = { sections: [{ id: 'enquiry', title: 'Enquiry', fields: [{ fieldId: enquiryType, tooltip: 'Sets the reply target: purchase order 2 h, quote 4 h, other 8 h (working hours).' }] }] };
+  const enquiryLayout = {
+    sections: [
+      {
+        id: 'enquiry',
+        title: 'Enquiry',
+        fields: [
+          {
+            fieldId: enquiryType,
+            tooltip: 'Sets the reply target: purchase order 2 h, quote 4 h, other 8 h (working hours).',
+          },
+        ],
+      },
+    ],
+  };
 
   const [customers] = await db
     .select()
@@ -72,10 +85,22 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
       .select()
       .from(categories)
       .where(and(eq(categories.title, title), isNull(categories.deletedAt)));
-    if (row) return row.id;
+    if (row) {
+      // Earlier runs created categories without the enquiry type on the form.
+      if (!row.formLayout.sections.length) {
+        await db.update(categories).set({ formLayout: enquiryLayout }).where(eq(categories.id, row.id));
+      }
+      return row.id;
+    }
     const [c] = await db
       .insert(categories)
-      .values({ title, groupName, defaultCrmDatabaseId: customers?.id ?? null, autoArchiveDays: 30 })
+      .values({
+        title,
+        groupName,
+        defaultCrmDatabaseId: customers?.id ?? null,
+        autoArchiveDays: 30,
+        formLayout: enquiryLayout,
+      })
       .returning();
     await db.insert(categoryStatuses).values(statusIds.map((statusId) => ({ categoryId: c!.id, statusId })));
     return c!.id;
@@ -152,9 +177,15 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   // The four Gmail inboxes (owner O-1, O-10). Addresses can be corrected in Settings > Mailboxes;
   // each is connected with "Connect Gmail" once Google sign-in is set up.
   const mailbox = async (title: string, address: string, categoryTitle: string, senderName: string) => {
-    const [row] = await db.select().from(mailboxQueues).where(and(eq(mailboxQueues.address, address), isNull(mailboxQueues.deletedAt)));
+    const [row] = await db
+      .select()
+      .from(mailboxQueues)
+      .where(and(eq(mailboxQueues.address, address), isNull(mailboxQueues.deletedAt)));
     if (row) return row.id;
-    const [m] = await db.insert(mailboxQueues).values({ title, address, senderName, provider: 'gmail', defaultCategoryId: cat[categoryTitle]! }).returning();
+    const [m] = await db
+      .insert(mailboxQueues)
+      .values({ title, address, senderName, provider: 'gmail', defaultCategoryId: cat[categoryTitle]! })
+      .returning();
     if (customers) await db.insert(mailboxQueueCrmDatabases).values({ queueId: m!.id, crmDatabaseId: customers.id });
     return m!.id;
   };
@@ -167,7 +198,8 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   // Everyone can reply from Support; each person also from their own inbox.
   for (const [key, profileId] of Object.entries(rp)) {
     const allowed = [boxes.support, ...(key in boxes ? [boxes[key as keyof typeof boxes]] : [])];
-    for (const queueId of allowed) await db.insert(rightsProfileMailboxes).values({ rightsProfileId: profileId, queueId }).onConflictDoNothing();
+    for (const queueId of allowed)
+      await db.insert(rightsProfileMailboxes).values({ rightsProfileId: profileId, queueId }).onConflictDoNothing();
   }
   // Enquiry type from the subject/body (owner O-11). No automatic filtering (owner O-12).
   await seedRoutingRules(db, { enquiryType, includeNoReply: false });

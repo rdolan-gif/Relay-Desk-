@@ -34,6 +34,8 @@ import { DynamicForm } from '../../components/DynamicForm';
 import { ContactPicker, UserPicker } from '../../components/FieldInput';
 import { HistoryPanel } from '../../components/HistoryPanel';
 import { RichTextEditor } from '../../components/RichTextEditor';
+import { EmailActivity } from '../../email/EmailActivity';
+import { EmailComposer, type ComposeMode } from '../../email/EmailComposer';
 import { Segmented } from '../../components/Segmented';
 import { useCrmMeta, useUserDirectory } from '../../crm/hooks';
 import { useFieldErrors } from '../../crm/useEntityForm';
@@ -111,6 +113,8 @@ export function TicketPage() {
       return '1:1';
     }
   });
+  const [compose, setCompose] = useState<{ mode: ComposeMode; source: Activity | null } | null>(null);
+  const [dismissed, setDismissed] = useState<string[]>([]);
   const [modal, setModal] = useState<
     null | { kind: 'child'; activityId?: string } | { kind: 'merge' } | { kind: 'move'; activityId: string }
   >(null);
@@ -446,6 +450,19 @@ export function TicketPage() {
                   }
                 }}
               />
+              {tk && !archived && tk.state !== 'closed' && can('tickets', 'update') && (
+                <Button
+                  variant="default"
+                  onClick={() =>
+                    action.mutate(async () => {
+                      await api('POST', `/tickets/${id}/fyi`);
+                      notifyOk(t.email.fyiDone);
+                    })
+                  }
+                >
+                  {t.email.fyi}
+                </Button>
+              )}
               <Button
                 variant="default"
                 onClick={() => {
@@ -583,18 +600,81 @@ export function TicketPage() {
               <Tabs.Panel value="activities" pt="md">
                 <Stack>
                   {activities.data?.length === 0 && <Text c="dimmed">{t.tickets.noActivities}</Text>}
-                  {activities.data?.map((a) => (
-                    <ActivityItem
-                      key={a.id}
-                      a={a}
-                      ticketId={Number(id)}
-                      mine={a.userId === me!.user.id}
-                      canMove={meta.data!.can.moveActivities}
-                      onChanged={refresh}
-                      onChild={() => (setModalValue(''), setModal({ kind: 'child', activityId: a.id }))}
-                      onMove={() => (setModalValue(''), setModal({ kind: 'move', activityId: a.id }))}
+                  {activities.data
+                    ?.filter((a) => a.suggestedTicketIds.length > 0 && !dismissed.includes(a.id))
+                    .map((a) => (
+                      <Alert key={`s${a.id}`} color="amber">
+                        <Group justify="space-between">
+                          <Group gap="xs">
+                            <Text size="sm">{t.email.suggested}</Text>
+                            {a.suggestedTicketIds.map((sid) => (
+                              <Group key={sid} gap={4}>
+                                <Anchor component={Link} to={`/tickets/${sid}`} size="sm">
+                                  #{sid}
+                                </Anchor>
+                                {meta.data!.can.moveActivities && !archived && (
+                                  <Button
+                                    size="compact-xs"
+                                    variant="light"
+                                    onClick={() => action.mutate(() => api('POST', `/tickets/${id}/activities/${a.id}/move`, { targetTicketId: sid }))}
+                                  >
+                                    {t.email.moveHere(sid)}
+                                  </Button>
+                                )}
+                              </Group>
+                            ))}
+                          </Group>
+                          <Button size="compact-xs" variant="subtle" onClick={() => setDismissed([...dismissed, a.id])}>
+                            {t.email.dismiss}
+                          </Button>
+                        </Group>
+                      </Alert>
+                    ))}
+                  {activities.data?.map((a) =>
+                    a.type === 'email' && a.email ? (
+                      <EmailActivity key={a.id} a={a} onCompose={(mode, source) => !archived && setCompose({ mode, source })} />
+                    ) : (
+                      <ActivityItem
+                        key={a.id}
+                        a={a}
+                        ticketId={Number(id)}
+                        mine={a.userId === me!.user.id}
+                        canMove={meta.data!.can.moveActivities}
+                        onChanged={refresh}
+                        onChild={() => (setModalValue(''), setModal({ kind: 'child', activityId: a.id }))}
+                        onMove={() => (setModalValue(''), setModal({ kind: 'move', activityId: a.id }))}
+                      />
+                    ),
+                  )}
+                  {compose && tk && (
+                    <EmailComposer
+                      key={`${compose.mode}-${compose.source?.id ?? 'new'}`}
+                      mode={compose.mode}
+                      source={compose.source}
+                      ticket={{ id: tk.id, title: tk.title, categoryId: tk.categoryId }}
+                      formDirty={dirty}
+                      saveForm={() => api('PATCH', `/tickets/${id}`, { ...draft, version: tk.version })}
+                      onSent={async () => {
+                        setCompose(null);
+                        await refresh();
+                      }}
+                      onCancel={() => setCompose(null)}
                     />
-                  ))}
+                  )}
+                  {!compose && can('tickets', 'update') && !archived && (
+                    <Group>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        onClick={() => {
+                          const lastIn = [...(activities.data ?? [])].reverse().find((x) => x.type === 'email' && x.direction === 'in');
+                          setCompose(lastIn ? { mode: 'reply', source: lastIn } : { mode: 'new', source: null });
+                        }}
+                      >
+                        {activities.data?.some((x) => x.type === 'email' && x.direction === 'in') ? t.email.reply : t.email.newEmail}
+                      </Button>
+                    </Group>
+                  )}
                   {can('tickets', 'update') && !archived && (
                     <Paper withBorder p="sm">
                       <Stack gap="xs">

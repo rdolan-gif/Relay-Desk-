@@ -81,6 +81,20 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 | Q-P2-15 | Date-time inputs              | Use the browser's own picker, which follows the computer's regional settings (DD/MM/YYYY on UK-configured machines).                       | Assumed  |
 | Q-P2-16 | "Sessions view" in History    | Comes with time tracking (spec 6.5, [SHOULD]); "Hide activities" is built.                                                                 | Assumed  |
 
+## Phase 3 decisions
+
+| #      | Topic                    | Decision                                                                                                                                  | Status   |
+| ------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Q-P3-1 | Gmail access             | Internal OAuth app, scopes `gmail.readonly` + `gmail.send` only. Relay Desk never changes the Gmail inbox (no labels, no deletes).        | Assumed  |
+| Q-P3-2 | Collecting mail          | Polling the Gmail history every 60 s (free, no Pub/Sub). Mail already in the inbox when it is connected is not imported.                  | Assumed  |
+| Q-P3-3 | Connecting an inbox      | Someone signs in to Google _as that inbox_; a different account is refused. The refresh token is stored encrypted.                        | Assumed  |
+| Q-P3-4 | Inbox addresses          | support@, ryan@, thierry@ and heather@ricoman.com. Please confirm the exact addresses; they can be corrected in Settings › Mailboxes.     | **Open** |
+| Q-P3-5 | No-reply rule            | The demo seed has a "no-reply sender → Do not reply" rule; the Ricoman setup does not, because every email should become a ticket (O-12). | Assumed  |
+| Q-P3-6 | Email bodies             | Shown in a sandboxed frame after sanitising; remote images are shown. Scripts and forms never run.                                        | Assumed  |
+| Q-P3-7 | Attachments              | Stored on the server's disk (`STORAGE_DIR`), 25 MB per email (Gmail's own limit). Object storage can replace it later.                    | Assumed  |
+| Q-P3-8 | Several matching tickets | The email goes to the most recently active ticket; the others are suggested with a "Move to #id" banner.                                  | Assumed  |
+| Q-P3-9 | Recipient check          | Addresses are checked strictly before sending; a pasted "name@example.com," is refused rather than sent to a broken address.              | Assumed  |
+
 ## Owner answers, 04/11/2026
 
 | #   | Topic                        | Decision                                                                                                                                                                                                                                               | Status     |

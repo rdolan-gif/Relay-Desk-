@@ -13,7 +13,8 @@ Progress and the test for each acceptance criterion: `docs/progress.md`.
 - Phase 0 (foundations): **done**
 - Phase 1 (CRM core): **done**
 - Phase 2 (tickets without email): **done**
-- Next: Phase 3 (email channel)
+- Phase 3 (email channel, Gmail API): **done** — Google setup in `docs/setup/gmail.md`
+- Next: Phase 4 (SLA and distribution; reply targets 2/4/8 working hours by enquiry type)
 
 ## Stack
 
