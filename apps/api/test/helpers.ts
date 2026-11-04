@@ -31,7 +31,7 @@ export async function createTestContext(): Promise<TestContext> {
       custom_fields, audit_log, login_attempts, sessions, rights_profile_visible_users,
       rights_profile_editable_access_profiles, rights_profile_editable_rights_profiles,
       notifications, notification_rules, queue_logins, rights_profile_macros, macro_categories, macros,
-      sla_definitions, time_groups,
+      sla_definitions, time_groups, jobs, import_templates,
       users, access_profiles, rights_profiles RESTART IDENTITY CASCADE
   `);
   const ids = await seed(db, PASSWORD);

@@ -28,7 +28,7 @@ import { MAIL_PROVIDERS, type MailProviders } from '../email/providers';
 import { SlaService } from '../sla/sla.service';
 import { RealtimeService } from './realtime.service';
 
-type Kind = InAppKind | 'sla_warning' | 'sla_breached' | 'email_failed';
+type Kind = InAppKind | 'sla_warning' | 'sla_breached' | 'email_failed' | 'job_done';
 
 const EMAIL_REASON: Record<EmailKind, string> = {
   owner: 'you own this ticket',
@@ -160,6 +160,14 @@ export class NotificationsService {
       title: `An email on #${ticketId} was not delivered`,
       body: reason,
     }).catch((err) => this.log.error((err as Error).message));
+  }
+
+  /** A background job finished (spec 13: import/export jobs finished). */
+  async jobDone(userId: string | null, title: string, body: string) {
+    if (!userId) return;
+    await this.add(userId, 'job_done', { title, body, link: '/jobs' }).catch((err) =>
+      this.log.error((err as Error).message),
+    );
   }
 
   /**
@@ -309,18 +317,16 @@ export class NotificationsService {
       await tx.delete(notificationRules).where(eq(notificationRules.userId, auth.user.id));
       const on = allowed.filter((r) => r.owner || r.followed || r.new || r.activity);
       if (on.length)
-        await tx
-          .insert(notificationRules)
-          .values(
-            on.map((r) => ({
-              userId: auth.user.id,
-              categoryId: r.categoryId,
-              owner: r.owner,
-              followed: r.followed,
-              isNew: r.new,
-              activity: r.activity,
-            })),
-          );
+        await tx.insert(notificationRules).values(
+          on.map((r) => ({
+            userId: auth.user.id,
+            categoryId: r.categoryId,
+            owner: r.owner,
+            followed: r.followed,
+            isNew: r.new,
+            activity: r.activity,
+          })),
+        );
     });
     return this.rules(auth);
   }
@@ -351,7 +357,7 @@ export class NotificationsService {
   private async add(
     userId: string,
     kind: Kind,
-    v: { ticketId?: number; actorId?: string | null; title: string; body?: string; dedupeKey?: string },
+    v: { ticketId?: number; actorId?: string | null; title: string; body?: string; dedupeKey?: string; link?: string },
   ): Promise<boolean> {
     const [row] = await this.db
       .insert(notifications)
@@ -363,6 +369,7 @@ export class NotificationsService {
         title: v.title,
         body: v.body ?? '',
         dedupeKey: v.dedupeKey ?? null,
+        link: v.link ?? null,
       })
       .onConflictDoNothing()
       .returning();
@@ -413,6 +420,7 @@ export function publicNotification(n: typeof notifications.$inferSelect) {
     id: n.id,
     kind: n.kind,
     ticketId: n.ticketId,
+    link: n.link,
     title: n.title,
     body: n.body,
     readAt: n.readAt?.toISOString() ?? null,

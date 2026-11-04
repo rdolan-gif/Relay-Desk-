@@ -25,6 +25,11 @@ export const AUDIT_EVENT_TYPES = [
   'bulk_job.run',
   'gdpr.anonymised',
   'gdpr.erased',
+  'gdpr.subject_access_export',
+  'import.run',
+  'merge.run',
+  'delete.run',
+  'delete.restored',
 ] as const;
 export type AuditEventType = (typeof AUDIT_EVENT_TYPES)[number];
 

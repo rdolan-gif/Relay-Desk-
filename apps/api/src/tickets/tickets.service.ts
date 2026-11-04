@@ -271,11 +271,21 @@ export class TicketsService {
   /** Title, description, comment text, or the ticket number ("123" or "#123"). */
   searchSql(term: string): SQL {
     const like = likeTerm(term);
-    const parts: SQL[] = [
-      sql`${tickets.title} ilike ${like}`,
-      sql`${tickets.description} ilike ${like}`,
-      sql`exists (select 1 from activities a where a.ticket_id = ${tickets.id} and a.deleted_at is null and a.body_html ilike ${like})`,
-    ];
+    const parts: SQL[] = [sql`${tickets.title} ilike ${like}`, sql`${tickets.description} ilike ${like}`];
+    // Full-text over comments and emails (spec 14), using the GIN-indexed search vectors.
+    const words = term
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}@._-]+/u)
+      .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
+      .filter((w) => w.length >= 2)
+      .slice(0, 8);
+    if (words.length) {
+      const query = words.map((w) => `${w}:*`).join(' & ');
+      parts.push(
+        sql`exists (select 1 from activities a where a.ticket_id = ${tickets.id} and a.deleted_at is null and a.search_vector @@ to_tsquery('simple', ${query}))`,
+        sql`exists (select 1 from activities a join email_messages m on m.activity_id = a.id where a.ticket_id = ${tickets.id} and a.deleted_at is null and m.search_vector @@ to_tsquery('simple', ${query}))`,
+      );
+    }
     const num = term.replace(/^#/, '');
     if (/^\d{1,9}$/.test(num)) parts.push(sql`${tickets.id} = ${Number(num)}`);
     return or(...parts)!;
@@ -630,6 +640,7 @@ export class TicketsService {
           deadlineManual,
           reopenAt: t.reopenAt,
           closedAt: closedAtFor(before, t.state),
+          archivedAt: t.state === 'archived' ? (before.state === 'archived' ? before.archivedAt : new Date()) : null,
           customFields,
           version: before.version + 1,
           updatedAt: new Date(),
@@ -976,7 +987,7 @@ export class TicketsService {
       await this.db.transaction(async (tx) => {
         await tx
           .update(tickets)
-          .set({ state: 'archived', version: t.version + 1, updatedAt: now })
+          .set({ state: 'archived', archivedAt: now, version: t.version + 1, updatedAt: now })
           .where(eq(tickets.id, t.id));
         await this.history.record(tx, null, 'ticket', t.id, 'update', [
           { field: 'state', old: 'closed', new: 'archived' },

@@ -74,6 +74,13 @@ import { NotificationsController, PresenceController } from './notifications/not
 import { NotificationsService } from './notifications/notifications.service';
 import { PresenceService } from './notifications/presence.service';
 import { RealtimeService } from './notifications/realtime.service';
+import { DataController } from './data/data.controller';
+import { DataService } from './data/data.service';
+import { BulkService } from './data/deleted.service';
+import { MergeService } from './data/merge.service';
+import { GdprService } from './gdpr/gdpr.service';
+import { JobsController } from './jobs/jobs.controller';
+import { JobsService } from './jobs/jobs.service';
 
 class PoolCloser implements OnApplicationShutdown {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
@@ -128,8 +135,15 @@ export class AppModule {
         PresenceController,
         MacrosController,
         TicketMacrosController,
+        JobsController,
+        DataController,
       ],
       providers: [
+        JobsService,
+        GdprService,
+        DataService,
+        MergeService,
+        BulkService,
         RealtimeService,
         PresenceService,
         NotificationsService,

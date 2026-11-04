@@ -63,7 +63,7 @@ export const ticketUpdateSchema = z.object(ticketFields).partial().extend({
 });
 
 export const bulkEditSchema = z.object({
-  ticketIds: z.array(z.number().int().positive()).min(1).max(200),
+  ticketIds: z.array(z.number().int().positive()).min(1).max(5000),
   changes: z
     .object({
       categoryId: z.string().uuid().optional(),

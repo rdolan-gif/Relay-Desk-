@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { customType } from 'drizzle-orm/pg-core';
 import {
   boolean,
   index,
@@ -38,6 +39,8 @@ import type {
   TimeException,
   UserType,
 } from '@relay-desk/domain';
+
+const tsvector = customType<{ data: string }>({ dataType: () => 'tsvector' });
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -304,6 +307,7 @@ export const accounts = pgTable(
     customFields: jsonb('custom_fields').$type<Record<string, unknown>>().notNull().default({}),
     /** Overrides the category's SLA for this account's contacts (spec 8). */
     slaId: uuid('sla_id').references(() => slaDefinitions.id),
+    mergedIntoId: uuid('merged_into_id'),
     ...timestamps,
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -334,6 +338,10 @@ export const contacts = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     customFields: jsonb('custom_fields').$type<Record<string, unknown>>().notNull().default({}),
+    /** Merged into this contact (spec 12.4); the row is soft-deleted. */
+    mergedIntoId: uuid('merged_into_id'),
+    /** Right to erasure (spec 14): personal data replaced; the row stays for reports. */
+    anonymisedAt: timestamp('anonymised_at', { withTimezone: true }),
     ...timestamps,
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -448,6 +456,9 @@ export const categories = pgTable('categories', {
   slaId: uuid('sla_id').references(() => slaDefinitions.id),
   /** Working hours for SLA maths; none = the clock runs 24/7. */
   timeGroupId: uuid('time_group_id').references(() => timeGroups.id),
+  /** Retention (spec 14 [SHOULD]): anonymise or delete tickets N days after archiving. */
+  retentionAction: text('retention_action').$type<'none' | 'anonymise' | 'delete'>().notNull().default('none'),
+  retentionDays: integer('retention_days'),
   ...timestamps,
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
@@ -529,6 +540,8 @@ export const tickets = pgTable(
     /** Created through a mailbox queue with no User: eligible for distribution (spec 9). */
     distributable: boolean('distributable').notNull().default(false),
     isAnonymised: boolean('is_anonymised').notNull().default(false),
+    /** When the ticket was last archived (retention, spec 14). */
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
@@ -603,8 +616,16 @@ export const activities = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     editedAt: timestamp('edited_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    /** Full-text search over the body (spec 14), maintained by PostgreSQL. */
+    searchVector: tsvector('search_vector').generatedAlwaysAs(
+      sql`to_tsvector('simple', regexp_replace(coalesce(body_html, ''), '<[^>]+>', ' ', 'g'))`,
+    ),
   },
-  (t) => [index('activities_ticket_idx').on(t.ticketId, t.createdAt)],
+  (t) => [
+    index('activities_ticket_idx').on(t.ticketId, t.createdAt),
+    index('activities_search_gin').using('gin', t.searchVector),
+    index('activities_contact_idx').on(t.contactId),
+  ],
 );
 
 /** Saved ticket filters shown in the sidebar: team views (no owner) or personal "my" views. */
@@ -775,8 +796,15 @@ export const emailMessages = pgTable(
     classification: text('classification').notNull().default('normal'),
     rawStorageKey: text('raw_storage_key'),
     scheduledFor: timestamp('scheduled_for', { withTimezone: true }),
+    searchVector: tsvector('search_vector').generatedAlwaysAs(
+      sql`to_tsvector('simple', coalesce(subject, '') || ' ' || coalesce(body_text, ''))`,
+    ),
   },
-  (t) => [index('email_messages_message_id_idx').on(t.messageId), index('email_messages_queue_idx').on(t.queueId)],
+  (t) => [
+    index('email_messages_message_id_idx').on(t.messageId),
+    index('email_messages_queue_idx').on(t.queueId),
+    index('email_messages_search_gin').using('gin', t.searchVector),
+  ],
 );
 
 /** Every message fetched from a mailbox, so restarts never duplicate or skip mail (spec 11.1). */
@@ -908,6 +936,8 @@ export const notifications = pgTable(
     body: text('body').notNull().default(''),
     /** Stops repeats, e.g. one SLA warning per deadline. */
     dedupeKey: text('dedupe_key'),
+    /** Where clicking goes when it is not a ticket, e.g. "/jobs". */
+    link: text('link'),
     readAt: timestamp('read_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -974,3 +1004,37 @@ export const rightsProfileMacros = pgTable(
   },
   (t) => [primaryKey({ columns: [t.rightsProfileId, t.macroId] })],
 );
+
+/** Background jobs (spec 14): bulk edits, imports, exports, erasure, subject access exports. */
+export const jobs = pgTable(
+  'jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    kind: text('kind').notNull(),
+    status: text('status').$type<'queued' | 'running' | 'done' | 'failed'>().notNull().default('queued'),
+    title: text('title').notNull(),
+    total: integer('total').notNull().default(0),
+    done: integer('done').notNull().default(0),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    result: jsonb('result').$type<Record<string, unknown>>(),
+    error: text('error'),
+    /** A file to download when finished (export, error report, ZIP). */
+    fileKey: text('file_key'),
+    fileName: text('file_name'),
+    fileMime: text('file_mime'),
+    createdById: uuid('created_by_id').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [index('jobs_user_idx').on(t.createdById, t.createdAt)],
+);
+
+/** Saved column mappings for imports (spec 12.4). */
+export const importTemplates = pgTable('import_templates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  entity: text('entity').$type<'contacts' | 'accounts'>().notNull(),
+  name: text('name').notNull(),
+  mapping: jsonb('mapping').$type<Record<string, string>>().notNull(),
+  createdById: uuid('created_by_id').references(() => users.id),
+  ...timestamps,
+});

@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
+import { GdprService } from '../gdpr/gdpr.service';
 import { CONFIG, type AppConfig } from '../config/config';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DistributionService } from '../sla/distribution.service';
@@ -22,6 +23,7 @@ export class TicketJobsService implements OnModuleInit, OnApplicationShutdown {
     @Inject(SlaService) private readonly sla: SlaService,
     @Inject(DistributionService) private readonly distribution: DistributionService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(GdprService) private readonly gdpr: GdprService,
   ) {}
 
   onModuleInit() {
@@ -41,6 +43,7 @@ export class TicketJobsService implements OnModuleInit, OnApplicationShutdown {
       // Safety net for distribution (spec 9); runs are cheap when there is no backlog.
       const assigned = await this.distribution.run(undefined, now);
       await this.notifications.slaSweep(now);
+      await this.gdpr.applyRetention(now);
       if (reopened.length || archived.length || assigned.length)
         this.log.log(
           `reopened ${reopened.length}, archived ${archived.length}, distributed ${assigned.length}, SLA checked ${decided}`,

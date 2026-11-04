@@ -14,6 +14,7 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
+import { BulkService } from '../data/deleted.service';
 import { MacrosService } from '../macros/macros.service';
 import { ApiTags } from '@nestjs/swagger';
 import type { z } from 'zod';
@@ -257,6 +258,7 @@ export class TicketsController {
     @Inject(ActivitiesService) private readonly activities: ActivitiesService,
     @Inject(ViewsService) private readonly views: ViewsService,
     @Inject(MacrosService) private readonly macros: MacrosService,
+    @Inject(BulkService) private readonly bulkOps: BulkService,
   ) {}
 
   @RequireAccess('tickets', 'read')
@@ -282,7 +284,8 @@ export class TicketsController {
         reason: 'verb_not_granted',
       });
     }
-    return this.tickets.bulkEdit(auth, body.ticketIds, body.changes);
+    // Above 200 tickets this runs as a background job (spec 14).
+    return this.bulkOps.bulkEditTickets(auth, body.ticketIds, body.changes);
   }
 
   @RequireFlag('can_merge_tickets')
