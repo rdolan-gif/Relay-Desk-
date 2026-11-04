@@ -50,3 +50,18 @@ export async function apiUpload<T>(path: string, file: File): Promise<T> {
   if (!res.ok) throw new ApiError(res.status, data);
   return data as T;
 }
+
+/** Downloads a file from the API (exports, job results) and saves it in the browser. */
+export async function downloadFile(path: string, fallbackName = 'download') {
+  const res = await fetch(`/api${path}`, { credentials: 'same-origin' });
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}

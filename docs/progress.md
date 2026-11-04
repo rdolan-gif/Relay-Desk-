@@ -10,6 +10,49 @@
 | Company › Branch › Branch number with phones, emails and addresses; branch card on tickets; branch and company ticket lists | `packages/domain/src/crm/accounts.test.ts`, `apps/api/test/branches.test.ts`           |
 | Support team structure (categories, rights, views)                                                                          | `pnpm db:setup:support` (add `-- --demo` for demo users and data)                      |
 
+## Phase 6 — Search, bulk, GDPR ✅
+
+Scope (spec 20): global search, bulk edit/delete as jobs, import/export with mapping
+templates, contact merge, anonymise, erasure, subject access export.
+
+**Done when:** erasing a contact leaves no personal data in its tickets' emails or
+attachments, and the audit log records it.
+
+| Criterion / rule                                                                                                     | Test                                                                    |
+| -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Erasing a contact leaves no personal data in its tickets' emails or attachments (files deleted); audited**         | `apps/api/test/phase6-acceptance.test.ts`, `e2e/tests/phase6.spec.ts`   |
+| Anonymise a ticket: needs the anonymise access and a typed confirmation; metadata kept                               | `phase6-acceptance.test.ts`, `packages/domain/src/data.test.ts`         |
+| Subject access export: one ZIP of contact, tickets, emails (.eml) and attachments                                    | `phase6-acceptance.test.ts`                                             |
+| Retention per category: anonymise or delete N days after archiving                                                   | `phase6-acceptance.test.ts`, `data.test.ts`                             |
+| Global search: full text over email bodies, subjects and comments; rights respected                                  | `phase6-acceptance.test.ts`                                             |
+| Bulk delete is soft and restorable by an administrator for 30 days                                                   | `phase6-acceptance.test.ts`, `data.test.ts`, `e2e/tests/phase6.spec.ts` |
+| Bulk edit and delete above 200 items run as jobs with progress and a notification                                    | `phase6-acceptance.test.ts`                                             |
+| Import CSV/XLSX: mapping guessed and saved as templates, preview, skip/update/create on email or phone, error report | `phase6-acceptance.test.ts`, `data.test.ts`, `e2e/tests/phase6.spec.ts` |
+| Export CSV/XLSX of the filtered list and chosen columns (needs export access); formulas neutralised                  | `phase6-acceptance.test.ts`, `data.test.ts`, `e2e/tests/phase6.spec.ts` |
+| Ticket emails as a ZIP of .eml files                                                                                 | `phase6-acceptance.test.ts`                                             |
+| Merge contacts and accounts: survivor, per-field choice, tickets/contacts move, history                              | `phase6-acceptance.test.ts`, `data.test.ts`                             |
+
+What exists:
+
+- Domain: `data/csv.ts`, `data/imports.ts`, `data/merge.ts`, `data/gdpr.ts`.
+- API: `/api/jobs` (+ `:id`, `:id/file`), `/api/exports/:entity`, `/api/exports/tickets/emails`,
+  `/api/imports/upload`, `/api/imports`, `/api/imports/templates`, `/api/crm/{contacts,accounts}/merge`,
+  `/api/{tickets,crm/contacts,crm/accounts}/bulk-delete`, `/api/deleted/:type` (+ restore),
+  `/api/tickets/:id/anonymise`, `/api/crm/contacts/:id/erase`,
+  `/api/crm/contacts/:id/subject-access-export`; retention in the minute job; search vectors
+  (GIN) on comments and emails.
+- Web: Export menu on every list (CSV, Excel, ticket emails ZIP), bulk Delete and Merge,
+  import wizard, background job progress and a Background jobs page, Erase and Subject access
+  export on contacts, Anonymise on tickets, Settings › Deleted items, retention on categories.
+
+Deferred, deliberately:
+
+- KB articles in global search arrive with the knowledge base (Phase 7).
+- Sharing saved filter schemes with a rights profile ([SHOULD]) and filters on the activities
+  and users lists: Phase 8.
+- Selecting "all matching" (beyond one page) for bulk actions in the UI: Phase 8; the API already
+  takes up to 5,000 ids and runs them as jobs.
+
 ## Phase 5 — Notifications and macros ✅
 
 Scope (spec 20): notification rules, in-app centre, real-time presence, optimistic locking,

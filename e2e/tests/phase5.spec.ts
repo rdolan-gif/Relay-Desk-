@@ -24,7 +24,9 @@ async function newSupportTicket(page: Page, title: string, user?: string) {
   return Number(page.url().split('/').pop());
 }
 
-test('a "Waiting +2 days, Back" macro sets the fields, saves and returns to the list in one click', async ({ page }) => {
+test('a "Waiting +2 days, Back" macro sets the fields, saves and returns to the list in one click', async ({
+  page,
+}) => {
   await login(page, 'agent@relaydesk.local');
   const title = `E2E macro ${Date.now()}`;
   const id = await newSupportTicket(page, title);

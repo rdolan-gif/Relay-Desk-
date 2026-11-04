@@ -16,7 +16,8 @@ Progress and the test for each acceptance criterion: `docs/progress.md`.
 - Phase 3 (email channel, Gmail API): **done** — Google setup in `docs/setup/gmail.md`
 - Phase 4 (SLA and distribution; reply targets by enquiry type): **done**
 - Phase 5 (notifications, presence, macros): **done**
-- Next: Phase 6 (search, bulk, GDPR)
+- Phase 6 (search, bulk, import/export, merge, GDPR): **done**
+- Next: Phase 7 (reporting and knowledge base; no customer portal for now, owner answer)
 
 ## Stack
 
@@ -101,6 +102,9 @@ Integration tests drop and recreate the schema of `TEST_DATABASE_URL`
 - **Notifications**: after commit, call `NotificationsService.ticketEvent(id, { type, actorId })`
   (created / assigned / moved / activity); it never throws and never tells the actor. New tables
   must also be added to the TRUNCATE list in `apps/api/test/helpers.ts`.
+- **Jobs**: long work goes through `JobsService.start(auth, kind, title, payload, handler)`; tests
+  call `settle()`. **GDPR**: anything that stores personal data must be scrubbed by
+  `GdprService.scrubTicket/scrubActivities` (and its files deleted) — extend them with new tables.
 - **Owner O-15**: the system never closes tickets on its own (no auto-close in rules or email).
 - **Filters**: validate with domain `validateConditions`, translate with `filterSql`; keep
   `matchesConditions` (domain) and `conditionToSql` (API) in agreement.

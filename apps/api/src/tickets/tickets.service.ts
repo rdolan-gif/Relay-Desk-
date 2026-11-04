@@ -173,7 +173,8 @@ export class TicketsService {
       .leftJoin(users, eq(users.id, tickets.userId))
       .leftJoin(contacts, eq(contacts.id, tickets.contactId))
       .where(cond)
-      .orderBy(q.dir === 'asc' ? asc(sortCol) : desc(sortCol), desc(tickets.id))
+      // Newest first unless the user picked a sort (Q-P2-14).
+      .orderBy(q.sort && q.dir === 'asc' ? asc(sortCol) : desc(sortCol), desc(tickets.id))
       .limit(q.pageSize)
       .offset((q.page - 1) * q.pageSize);
     const [{ total }] = (await this.db
@@ -1113,5 +1114,6 @@ export function publicTicket(t: Row) {
     deadlineManual: t.deadlineManual,
     firstAnswerMet: t.firstAnswerMet,
     solutionMet: t.solutionMet,
+    isAnonymised: t.isAnonymised,
   };
 }

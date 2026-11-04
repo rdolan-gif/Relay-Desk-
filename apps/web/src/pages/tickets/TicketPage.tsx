@@ -22,6 +22,7 @@ import {
   Tooltip,
   TypographyStylesProvider,
 } from '@mantine/core';
+import { ConfirmTyped } from '../../components/ConfirmTyped';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -106,7 +107,8 @@ export function TicketPage() {
   const nav = useNavigate();
   const [params] = useSearchParams();
   const qc = useQueryClient();
-  const { me, can } = useAuth();
+  const { me, can, hasFlag } = useAuth();
+  const [anonymiseOpen, setAnonymiseOpen] = useState(false);
   const meta = useTicketMeta();
   const crm = useCrmMeta();
   const users = useUserDirectory();
@@ -478,6 +480,21 @@ export function TicketPage() {
 
   return (
     <Stack>
+      <ConfirmTyped
+        opened={anonymiseOpen}
+        title={t.gdpr.anonymiseTitle}
+        help={t.gdpr.anonymiseHelp}
+        phrase={`ANONYMISE ${id}`}
+        loading={action.isPending}
+        onClose={() => setAnonymiseOpen(false)}
+        onConfirm={(confirmation) =>
+          action.mutate(async () => {
+            await api('POST', `/tickets/${id}/anonymise`, { confirmation });
+            setAnonymiseOpen(false);
+            notifyOk(t.gdpr.anonymised);
+          })
+        }
+      />
       <Group justify="space-between" align="flex-start">
         <Stack gap={2}>
           <Group gap="xs">
@@ -625,6 +642,11 @@ export function TicketPage() {
                   {meta.data.can.merge && (
                     <Menu.Item onClick={() => (setModalValue(''), setModal({ kind: 'merge' }))}>
                       {t.tickets.merge}
+                    </Menu.Item>
+                  )}
+                  {hasFlag('can_anonymise') && can('tickets', 'update') && !tk?.isAnonymised && (
+                    <Menu.Item color="red" onClick={() => setAnonymiseOpen(true)}>
+                      {t.gdpr.anonymise}
                     </Menu.Item>
                   )}
                   {meta.data.can.delete && (

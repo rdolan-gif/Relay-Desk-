@@ -20,6 +20,8 @@ export interface Category {
   defaultCrmDatabaseId: string | null;
   slaId: string | null;
   timeGroupId: string | null;
+  retentionAction: 'none' | 'anonymise' | 'delete';
+  retentionDays: number | null;
   formLayout: FormLayout;
   autofocusTab: string;
   statusIds: string[];
@@ -54,6 +56,7 @@ export interface Ticket {
   firstAnswerAt?: string | null;
   noReplyNeeded?: boolean;
   closedAt?: string | null;
+  isAnonymised?: boolean;
   sla?: TicketSla | null;
   categoryTitle?: string;
   userName?: string | null;

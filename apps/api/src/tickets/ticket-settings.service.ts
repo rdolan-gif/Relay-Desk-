@@ -46,6 +46,8 @@ export interface CategoryInput {
   defaultCrmDatabaseId: string | null;
   slaId: string | null;
   timeGroupId: string | null;
+  retentionAction: 'none' | 'anonymise' | 'delete';
+  retentionDays: number | null;
   formLayout: FormLayout;
   autofocusTab: string;
   statusIds: string[];

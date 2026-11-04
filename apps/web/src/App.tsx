@@ -11,6 +11,9 @@ import {
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
+import { JobsPage } from './pages/JobsPage';
+import { ImportPage } from './pages/crm/ImportPage';
+import { DeletedItemsPage } from './pages/settings/DeletedItemsPage';
 import { useDisclosure } from '@mantine/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { NavLink as RouterLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
@@ -94,7 +97,10 @@ function Shell() {
     { to: '/settings/crm-databases', label: t.nav.crmDatabases, module: 'settings_crm_databases' as const },
     { to: '/settings/crm-record-types', label: t.nav.recordTypes, module: 'settings_crm_record_types' as const },
     { to: '/settings/audit-log', label: t.nav.auditLog, module: 'settings_audit_log' as const },
-  ].filter((l) => can(l.module, 'read'));
+  ]
+    .filter((l) => can(l.module, 'read'))
+    .map((l): { to: string; label: string } => ({ to: l.to, label: l.label }))
+    .concat(me!.user.type === 'administrator' ? [{ to: '/settings/deleted', label: t.nav.deleted }] : []);
   const crmLinks = [
     { to: '/crm/contacts', label: t.nav.contacts, module: 'crm_contacts' as const },
     { to: '/crm/accounts', label: t.nav.accounts, module: 'crm_accounts' as const },
@@ -166,6 +172,7 @@ function Shell() {
           </NavLink>
         )}
         <NavLink component={RouterLink} to="/account" label={t.nav.account} active={location.pathname === '/account'} />
+        <NavLink component={RouterLink} to="/jobs" label={t.nav.jobs} active={location.pathname === '/jobs'} />
         {settingsLinks.length > 0 && (
           <NavLink label={t.nav.settings} defaultOpened>
             {settingsLinks.map((l) => (
@@ -202,6 +209,9 @@ function Shell() {
           <Route path="/settings/slas" element={<SlasPage />} />
           <Route path="/settings/working-hours" element={<TimeGroupsPage />} />
           <Route path="/settings/macros" element={<MacrosPage />} />
+          <Route path="/settings/deleted" element={<DeletedItemsPage />} />
+          <Route path="/crm/import/:entity" element={<ImportPage />} />
+          <Route path="/jobs" element={<JobsPage />} />
           <Route path="/settings/crm-databases" element={<CrmDatabasesPage />} />
           <Route path="/settings/crm-record-types" element={<RecordTypesPage />} />
           <Route path="/crm/contacts" element={<ContactsPage />} />

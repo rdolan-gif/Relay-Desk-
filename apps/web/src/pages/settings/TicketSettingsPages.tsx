@@ -179,6 +179,8 @@ const EMPTY_CATEGORY: Omit<Category, 'id'> = {
   defaultCrmDatabaseId: null,
   slaId: null,
   timeGroupId: null,
+  retentionAction: 'none',
+  retentionDays: null,
   formLayout: { sections: [] },
   autofocusTab: 'form',
   statusIds: [],
@@ -271,6 +273,23 @@ export function CategoriesPage() {
                 max={3650}
                 value={draft.autoArchiveDays ?? ''}
                 onChange={(v) => set({ autoArchiveDays: v === '' ? null : Number(v) })}
+              />
+            </Group>
+            <Group grow>
+              <Select
+                label={t.gdpr.retention}
+                data={Object.entries(t.gdpr.retentionActions).map(([value, label]) => ({ value, label }))}
+                value={draft.retentionAction}
+                allowDeselect={false}
+                onChange={(v) => v && set({ retentionAction: v as Category['retentionAction'] })}
+              />
+              <NumberInput
+                label={t.gdpr.retentionDays}
+                min={1}
+                max={3650}
+                disabled={draft.retentionAction === 'none'}
+                value={draft.retentionDays ?? ''}
+                onChange={(v) => set({ retentionDays: v === '' ? null : Number(v) })}
               />
             </Group>
             <Group grow>

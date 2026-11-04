@@ -17,7 +17,9 @@ import { useDebouncedValue } from '@mantine/hooks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { FilterCondition, FilterFieldDef } from '@relay-desk/domain';
-import { api } from '../api';
+import { api, downloadFile } from '../api';
+import { useAuth } from '../auth';
+import { JobModal, type Job } from './JobModal';
 import { qs } from '../crm/hooks';
 import type { FilterScheme, ListName, Page } from '../crm/types';
 import { t } from '../i18n/en-GB';
@@ -45,6 +47,8 @@ interface Props<T extends { id: string | number }> {
   filterChoices?: Record<string, { value: string; label: string }[]>;
   onOpen: (row: T) => void;
   actions?: ReactNode;
+  /** Shows Export (CSV / Excel of the filtered list and visible columns) when the user may export. */
+  exportEntity?: 'contacts' | 'accounts' | 'tickets';
 }
 
 const PAGE_SIZE = 50;
@@ -65,6 +69,8 @@ export function EntityList<T extends { id: string | number }>(props: Props<T>) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [schemeName, setSchemeName] = useState('');
   const [selected, setSelected] = useState<T['id'][]>([]);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const { hasFlag } = useAuth();
 
   useEffect(() => {
     setPage(1);
@@ -121,6 +127,20 @@ export function EntityList<T extends { id: string | number }>(props: Props<T>) {
     onError: notifyError,
   });
 
+  /** The list as it is on screen, for exports. */
+  const listParams = () => ({
+    ...props.extraParams,
+    q: debounced.length >= 2 ? debounced : undefined,
+    filter: applied.length ? JSON.stringify(applied) : undefined,
+    sort: sort?.key,
+    dir: sort?.dir,
+  });
+  const runExport = (format: 'csv' | 'xlsx') =>
+    downloadFile(
+      `/exports/${props.exportEntity}${qs({ ...listParams(), format, columns: visibleKeys.join(',') })}`,
+      `${props.exportEntity}.${format}`,
+    ).catch(notifyError);
+
   const toggleColumn = (key: string, on: boolean) => {
     const next = on
       ? props.columns.map((c) => c.key).filter((k) => k === key || visibleKeys.includes(k))
@@ -166,6 +186,32 @@ export function EntityList<T extends { id: string | number }>(props: Props<T>) {
           }}
           w={200}
         />
+        {props.exportEntity && hasFlag('can_export') && (
+          <Menu>
+            <Menu.Target>
+              <Button variant="default">{t.data.export}</Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Label>{t.data.exportHelp}</Menu.Label>
+              {(['csv', 'xlsx'] as const).map((format) => (
+                <Menu.Item key={format} onClick={() => runExport(format)}>
+                  {format === 'csv' ? t.data.exportCsv : t.data.exportXlsx}
+                </Menu.Item>
+              ))}
+              {props.exportEntity === 'tickets' && (
+                <Menu.Item
+                  onClick={() =>
+                    api<Job>('POST', '/exports/tickets/emails', listParams())
+                      .then((j) => setJobId(j.id))
+                      .catch(notifyError)
+                  }
+                >
+                  {t.data.exportEmails}
+                </Menu.Item>
+              )}
+            </Menu.Dropdown>
+          </Menu>
+        )}
         <Menu closeOnItemClick={false}>
           <Menu.Target>
             <Button variant="default">{t.crm.columns}</Button>
@@ -287,6 +333,7 @@ export function EntityList<T extends { id: string | number }>(props: Props<T>) {
       {data.data && data.data.total > PAGE_SIZE && (
         <Pagination total={Math.ceil(data.data.total / PAGE_SIZE)} value={page} onChange={setPage} />
       )}
+      <JobModal jobId={jobId} onClose={() => setJobId(null)} />
       <Modal opened={saveOpen} onClose={() => setSaveOpen(false)} title={t.crm.saveFilterAs}>
         <Stack>
           <TextInput

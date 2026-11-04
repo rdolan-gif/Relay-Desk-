@@ -1,4 +1,10 @@
-import { Badge, Button, Text } from '@mantine/core';
+import { Badge, Button, Group, Text } from '@mantine/core';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { api } from '../../api';
+import { JobModal } from '../../components/JobModal';
+import { MergeModal } from '../../components/MergeModal';
+import { notifyError, notifyOk } from '../../notify';
 import { useNavigate } from 'react-router-dom';
 import { formatPhoneForDisplay, sortedOptions, type CustomFieldDef } from '@relay-desk/domain';
 import { useAuth } from '../../auth';
@@ -38,10 +44,76 @@ function filterChoices(fields: CustomFieldDef[], extra: Record<string, { value: 
   return out;
 }
 
+/** Bulk delete and merge for contacts and accounts (spec 12.4, 14). */
+function useCrmBulk(entity: 'contacts' | 'accounts') {
+  const { can } = useAuth();
+  const nav = useNavigate();
+  const qc = useQueryClient();
+  const [mergeIds, setMergeIds] = useState<string[] | null>(null);
+  const [clearFn, setClearFn] = useState<(() => void) | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const module = entity === 'contacts' ? 'crm_contacts' : 'crm_accounts';
+  const del = useMutation({
+    mutationFn: (ids: string[]) =>
+      api<{ deleted?: string[]; failed?: unknown[]; job?: { id: string } }>('POST', `/crm/${entity}/bulk-delete`, {
+        ids,
+      }),
+    onSuccess: async (r) => {
+      if (r.job) setJobId(r.job.id);
+      else
+        notifyOk(
+          `${t.data.deleted(r.deleted!.length)}${r.failed!.length ? ` ${t.data.failed(r.failed!.length)}` : ''}`,
+        );
+      clearFn?.();
+      await qc.invalidateQueries({ queryKey: [`/crm/${entity}`] });
+    },
+    onError: notifyError,
+  });
+  const actions = (ids: (string | number)[], clear: () => void) => (
+    <>
+      {can(module, 'update') && ids.length >= 2 && (
+        <Button size="xs" variant="light" onClick={() => (setClearFn(() => clear), setMergeIds(ids as string[]))}>
+          {t.data.merge}
+        </Button>
+      )}
+      {can(module, 'delete') && (
+        <Button
+          size="xs"
+          variant="light"
+          color="red"
+          onClick={() =>
+            window.confirm(t.data.deleteConfirm(ids.length)) && (setClearFn(() => clear), del.mutate(ids as string[]))
+          }
+        >
+          {t.data.delete}
+        </Button>
+      )}
+    </>
+  );
+  const modals = (
+    <>
+      <MergeModal
+        entity={entity}
+        ids={mergeIds}
+        onClose={() => setMergeIds(null)}
+        onDone={(id) => {
+          setMergeIds(null);
+          clearFn?.();
+          void qc.invalidateQueries({ queryKey: [`/crm/${entity}`] });
+          nav(`/crm/${entity}/${id}`);
+        }}
+      />
+      <JobModal jobId={jobId} onClose={() => setJobId(null)} />
+    </>
+  );
+  return { actions: can(module, 'update') || can(module, 'delete') ? actions : undefined, modals };
+}
+
 export function ContactsPage() {
   const nav = useNavigate();
-  const { me, can } = useAuth();
+  const { me, can, hasFlag } = useAuth();
   const meta = useCrmMeta();
+  const bulk = useCrmBulk('contacts');
   if (!meta.data) return null;
   const tz = me!.user.timezone;
   const columns: Column<Contact>[] = [
@@ -71,28 +143,43 @@ export function ContactsPage() {
     ...customColumns<Contact>(meta.data.customFields),
   ];
   return (
-    <EntityList<Contact>
-      list="contacts"
-      title={t.crm.contacts}
-      endpoint="/crm/contacts"
-      columns={columns}
-      defaultColumns={['name', 'emails', 'phones', 'accountName', 'updatedAt']}
-      filterFields={meta.data.filterFields.contacts}
-      filterChoices={filterChoices(meta.data.customFields, {
-        databaseId: meta.data.databases.map((d) => ({ value: d.id, label: d.title })),
-      })}
-      onOpen={(c) => nav(`/crm/contacts/${c.id}`)}
-      actions={
-        can('crm_contacts', 'create') && <Button onClick={() => nav('/crm/contacts/new')}>{t.crm.newContact}</Button>
-      }
-    />
+    <>
+      {bulk.modals}
+      <EntityList<Contact>
+        list="contacts"
+        exportEntity="contacts"
+        bulkActions={bulk.actions}
+        title={t.crm.contacts}
+        endpoint="/crm/contacts"
+        columns={columns}
+        defaultColumns={['name', 'emails', 'phones', 'accountName', 'updatedAt']}
+        filterFields={meta.data.filterFields.contacts}
+        filterChoices={filterChoices(meta.data.customFields, {
+          databaseId: meta.data.databases.map((d) => ({ value: d.id, label: d.title })),
+        })}
+        onOpen={(c) => nav(`/crm/contacts/${c.id}`)}
+        actions={
+          <Group>
+            {hasFlag('can_import_crm_data') && can('crm_contacts', 'update') && (
+              <Button variant="default" onClick={() => nav('/crm/import/contacts')}>
+                {t.data.import}
+              </Button>
+            )}
+            {can('crm_contacts', 'create') && (
+              <Button onClick={() => nav('/crm/contacts/new')}>{t.crm.newContact}</Button>
+            )}
+          </Group>
+        }
+      />
+    </>
   );
 }
 
 export function AccountsPage() {
   const nav = useNavigate();
-  const { me, can } = useAuth();
+  const { me, can, hasFlag } = useAuth();
   const meta = useCrmMeta();
+  const bulk = useCrmBulk('accounts');
   if (!meta.data) return null;
   const tz = me!.user.timezone;
   const columns: Column<Account>[] = [
@@ -105,21 +192,35 @@ export function AccountsPage() {
     ...customColumns<Account>(meta.data.customFields),
   ];
   return (
-    <EntityList<Account>
-      list="accounts"
-      title={t.crm.accounts}
-      endpoint="/crm/accounts"
-      columns={columns}
-      defaultColumns={['name', 'branchCount', 'contactCount', 'updatedAt']}
-      filterFields={meta.data.filterFields.accounts}
-      filterChoices={filterChoices(meta.data.customFields, {
-        databaseId: meta.data.databases.map((d) => ({ value: d.id, label: d.title })),
-      })}
-      onOpen={(a) => nav(`/crm/accounts/${a.id}`)}
-      actions={
-        can('crm_accounts', 'create') && <Button onClick={() => nav('/crm/accounts/new')}>{t.crm.newAccount}</Button>
-      }
-    />
+    <>
+      {bulk.modals}
+      <EntityList<Account>
+        list="accounts"
+        exportEntity="accounts"
+        bulkActions={bulk.actions}
+        title={t.crm.accounts}
+        endpoint="/crm/accounts"
+        columns={columns}
+        defaultColumns={['name', 'branchCount', 'contactCount', 'updatedAt']}
+        filterFields={meta.data.filterFields.accounts}
+        filterChoices={filterChoices(meta.data.customFields, {
+          databaseId: meta.data.databases.map((d) => ({ value: d.id, label: d.title })),
+        })}
+        onOpen={(a) => nav(`/crm/accounts/${a.id}`)}
+        actions={
+          <Group>
+            {hasFlag('can_import_crm_data') && can('crm_accounts', 'update') && (
+              <Button variant="default" onClick={() => nav('/crm/import/accounts')}>
+                {t.data.import}
+              </Button>
+            )}
+            {can('crm_accounts', 'create') && (
+              <Button onClick={() => nav('/crm/accounts/new')}>{t.crm.newAccount}</Button>
+            )}
+          </Group>
+        }
+      />
+    </>
   );
 }
 

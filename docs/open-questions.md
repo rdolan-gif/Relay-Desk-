@@ -81,6 +81,19 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 | Q-P2-15 | Date-time inputs              | Use the browser's own picker, which follows the computer's regional settings (DD/MM/YYYY on UK-configured machines).                       | Assumed  |
 | Q-P2-16 | "Sessions view" in History    | Comes with time tracking (spec 6.5, [SHOULD]); "Hide activities" is built.                                                                 | Assumed  |
 
+## Phase 6 decisions
+
+| #      | Topic             | Decision                                                                                                                                                                                                                                | Status  |
+| ------ | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Q-P6-1 | Background jobs   | Run one after another inside the API process (no Redis/BullMQ needed at Ricoman's volume); progress is stored and the person is notified when a job finishes.                                                                           | Assumed |
+| Q-P6-2 | Search engine     | PostgreSQL full text (prefix matching, so typing part of a word finds it) over comments and emails; titles and descriptions use simple matching.                                                                                        | Assumed |
+| Q-P6-3 | Import: accounts  | A contact's account is matched by name in the same CRM database and created if missing; a branch's company must already exist (import companies first).                                                                                 | Assumed |
+| Q-P6-4 | Export limits     | Up to 50,000 rows per export; files are downloaded straight away. Ticket email ZIPs run as a job.                                                                                                                                       | Assumed |
+| Q-P6-5 | Anonymising       | Text, email and phone custom values are cleared; choice, number, date and tick-box values stay (they describe the ticket, e.g. enquiry type). History and notifications are scrubbed; raw emails and attachments are deleted from disk. | Assumed |
+| Q-P6-6 | Erased contacts   | Become "Erased contact" with no emails or phones, are hidden from lists, and cannot be restored. Job titles never contain the person's name.                                                                                            | Assumed |
+| Q-P6-7 | Deleted items     | Restorable for 30 days by administrators (Settings › Deleted items); merged and erased records are not restorable. Nothing is purged automatically yet.                                                                                 | Assumed |
+| Q-P6-8 | Ticket list order | Fixed to newest first as recorded in Q-P2-14 (it was oldest first).                                                                                                                                                                     | Decided |
+
 ## Phase 5 decisions
 
 | #      | Topic                     | Decision                                                                                                                                                                                                  | Status   |

@@ -22,6 +22,8 @@ export const categorySchema = z.object({
   defaultCrmDatabaseId: z.string().uuid().nullable().default(null),
   slaId: z.string().uuid().nullable().default(null),
   timeGroupId: z.string().uuid().nullable().default(null),
+  retentionAction: z.enum(['none', 'anonymise', 'delete']).default('none'),
+  retentionDays: z.number().int().min(1).max(3650).nullable().default(null),
   formLayout: layoutSchema.default({ sections: [] }),
   autofocusTab: z.enum(['form', 'attachments', 'templates']).default('form'),
   statusIds: z.array(z.string().uuid()).max(200).default([]),

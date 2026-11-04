@@ -1,4 +1,6 @@
 import { Alert, Anchor, Button, Grid, Group, Paper, Select, Stack, Tabs, Text, TextInput, Title } from '@mantine/core';
+import { JobModal } from '../../components/JobModal';
+import { ConfirmTyped } from '../../components/ConfirmTyped';
 import { useDebouncedValue } from '@mantine/hooks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -16,7 +18,7 @@ import type { Contact, CustomValues } from '../../crm/types';
 import { useFieldErrors } from '../../crm/useEntityForm';
 import { formatDateTime } from '../../format';
 import { t } from '../../i18n/en-GB';
-import { notifyOk } from '../../notify';
+import { notifyError, notifyOk } from '../../notify';
 
 interface Draft {
   name: string;
@@ -32,7 +34,17 @@ export function ContactPage() {
   const isNew = id === 'new';
   const nav = useNavigate();
   const qc = useQueryClient();
-  const { me, can } = useAuth();
+  const { me, can, hasFlag } = useAuth();
+  const [gdprJob, setGdprJob] = useState<string | null>(null);
+  const [eraseOpen, setEraseOpen] = useState(false);
+  const gdpr = useMutation({
+    mutationFn: (fn: () => Promise<{ id: string }>) => fn(),
+    onSuccess: (j) => {
+      setEraseOpen(false);
+      setGdprJob(j.id);
+    },
+    onError: notifyError,
+  });
   const meta = useCrmMeta();
   const fieldErrors = useFieldErrors();
   const contact = useQuery({
@@ -111,9 +123,39 @@ export function ContactPage() {
 
   return (
     <Stack>
+      <ConfirmTyped
+        opened={eraseOpen}
+        title={t.gdpr.eraseTitle}
+        help={t.gdpr.eraseHelp}
+        phrase="ERASE"
+        loading={gdpr.isPending}
+        onClose={() => setEraseOpen(false)}
+        onConfirm={(confirmation) => gdpr.mutate(() => api('POST', `/crm/contacts/${id}/erase`, { confirmation }))}
+      />
+      <JobModal
+        jobId={gdprJob}
+        onClose={() => {
+          setGdprJob(null);
+          void contact.refetch();
+        }}
+      />
       <Group justify="space-between">
         <Title order={2}>{isNew ? t.crm.newContact : contact.data?.name}</Title>
         <Group>
+          {!isNew && hasFlag('can_export') && (
+            <Button
+              variant="default"
+              title={t.gdpr.sarHelp}
+              onClick={() => gdpr.mutate(() => api('POST', `/crm/contacts/${id}/subject-access-export`))}
+            >
+              {t.gdpr.sar}
+            </Button>
+          )}
+          {!isNew && hasFlag('can_anonymise') && can('crm_contacts', 'update') && (
+            <Button color="red" variant="subtle" onClick={() => setEraseOpen(true)}>
+              {t.gdpr.erase}
+            </Button>
+          )}
           {!isNew && can('crm_contacts', 'delete') && (
             <Button color="red" variant="subtle" onClick={() => window.confirm(t.crm.confirmDelete) && remove.mutate()}>
               {t.crm.delete}

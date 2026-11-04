@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, type ReactNode } from 'react';
-import { checkModuleAccess, type ModuleKey, type Verb } from '@relay-desk/domain';
+import { checkAccessFlag, checkModuleAccess, type AccessFlag, type ModuleKey, type Verb } from '@relay-desk/domain';
 import { ApiError, api, setCsrfToken } from './api';
 import type { Me } from './types';
 
@@ -10,6 +10,8 @@ interface AuthState {
   refresh: () => Promise<void>;
   /** UI convenience only; the API enforces the same rule. */
   can: (module: ModuleKey, verb: Verb) => boolean;
+  /** An access flag such as can_export (UI convenience; the API enforces it). */
+  hasFlag: (flag: AccessFlag) => boolean;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -41,6 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       !!me &&
       checkModuleAccess({ userId: me.user.id, type: me.user.type, isActive: true, access: me.access }, module, verb)
         .allowed,
+    hasFlag: (flag) =>
+      !!me &&
+      checkAccessFlag({ userId: me.user.id, type: me.user.type, isActive: true, access: me.access }, flag).allowed,
   };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

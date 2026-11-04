@@ -12,6 +12,7 @@ interface Notice {
   id: string;
   kind: string;
   ticketId: number | null;
+  link?: string | null;
   title: string;
   body: string;
   readAt: string | null;
@@ -80,6 +81,7 @@ export function NotificationBell() {
     if (!n.readAt) read.mutate(n.id);
     setOpen(false);
     if (n.ticketId) nav(`/tickets/${n.ticketId}`);
+    else if (n.link?.startsWith('/')) nav(n.link);
   };
 
   return (

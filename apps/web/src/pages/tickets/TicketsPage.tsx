@@ -20,6 +20,7 @@ import type { FilterCondition } from '@relay-desk/domain';
 import { api } from '../../api';
 import { useAuth } from '../../auth';
 import { EntityList, type Column } from '../../components/EntityList';
+import { JobModal } from '../../components/JobModal';
 import { SlaIcon } from '../../components/SlaIcon';
 import { FilterBuilder } from '../../components/FilterBuilder';
 import { useCrmMeta, useUserDirectory } from '../../crm/hooks';
@@ -59,15 +60,33 @@ export function TicketsPage() {
   });
   const bulkEdit = useMutation({
     mutationFn: () =>
-      api<{ updated: number[]; failed: { id: number }[] }>('POST', '/tickets/bulk-edit', {
+      api<{ updated?: number[]; failed?: { id: number }[]; job?: { id: string } }>('POST', '/tickets/bulk-edit', {
         ticketIds: bulk!.ids,
         changes: bulkChanges,
       }),
     onSuccess: async (r) => {
-      notifyOk(t.tickets.bulkResult(r.updated.length, r.failed.length));
+      if (r.job) setJobId(r.job.id);
+      else notifyOk(t.tickets.bulkResult(r.updated!.length, r.failed!.length));
       bulk?.clear();
       setBulk(null);
       setBulkChanges({});
+      await qc.invalidateQueries({ queryKey: ['/tickets'] });
+    },
+    onError: notifyError,
+  });
+  const [jobId, setJobId] = useState<string | null>(null);
+  const bulkDelete = useMutation({
+    mutationFn: (v: { ids: number[]; clear: () => void }) =>
+      api<{ deleted?: number[]; failed?: unknown[]; job?: { id: string } }>('POST', '/tickets/bulk-delete', {
+        ids: v.ids,
+      }),
+    onSuccess: async (r, v) => {
+      if (r.job) setJobId(r.job.id);
+      else
+        notifyOk(
+          `${t.data.deleted(r.deleted!.length)}${r.failed!.length ? ` ${t.data.failed(r.failed!.length)}` : ''}`,
+        );
+      v.clear();
       await qc.invalidateQueries({ queryKey: ['/tickets'] });
     },
     onError: notifyError,
@@ -237,6 +256,7 @@ export function TicketsPage() {
       </Grid.Col>
       <Grid.Col span={{ base: 12, md: 9, lg: 10 }}>
         <EntityList<Ticket>
+          exportEntity="tickets"
           list="tickets"
           title={current?.name ?? t.tickets.title}
           endpoint="/tickets"
@@ -268,9 +288,22 @@ export function TicketsPage() {
             )
           }
           bulkActions={
-            meta.data.can.bulkEdit || meta.data.can.merge
+            meta.data.can.bulkEdit || meta.data.can.merge || meta.data.can.delete
               ? (ids, clear) => (
                   <>
+                    {meta.data!.can.delete && (
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="red"
+                        onClick={() =>
+                          window.confirm(t.data.deleteConfirm(ids.length)) &&
+                          bulkDelete.mutate({ ids: ids as number[], clear })
+                        }
+                      >
+                        {t.data.delete}
+                      </Button>
+                    )}
                     {meta.data!.can.bulkEdit && (
                       <Button size="xs" variant="light" onClick={() => setBulk({ ids: ids as number[], clear })}>
                         {t.tickets.bulkEdit}
@@ -288,6 +321,7 @@ export function TicketsPage() {
         />
       </Grid.Col>
 
+      <JobModal jobId={jobId} onClose={() => setJobId(null)} />
       <Modal opened={!!newView} onClose={() => setNewView(null)} title={t.tickets.addView} size="xl">
         {newView && (
           <Stack>
