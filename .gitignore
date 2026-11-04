@@ -11,3 +11,4 @@ playwright-report/
 
 # Local file storage (STORAGE_DIR)
 data/
+apps/web/dist-demo/

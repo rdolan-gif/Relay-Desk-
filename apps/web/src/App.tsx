@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Badge,
   AppShell,
   Burger,
   Center,
@@ -42,6 +43,7 @@ import { CategoriesPage, StatusesPage, TeamViewsPage } from './pages/settings/Ti
 import { CustomFieldsPage } from './pages/settings/CustomFieldsPage';
 import { MailboxesPage } from './pages/email/MailboxesPage';
 import { NotificationBell } from './components/NotificationBell';
+import { DEMO } from './demo/demo';
 import { ReadyForEmail } from './components/ReadyForEmail';
 import { MacrosPage } from './pages/settings/MacrosPage';
 import { SlasPage, TimeGroupsPage } from './pages/settings/SlaPages';
@@ -134,6 +136,11 @@ function Shell() {
           </Group>
           {(crmLinks.length > 0 || can('tickets', 'read')) && <GlobalSearch />}
           <Group>
+            {DEMO && (
+              <Badge color="amber" variant="filled" title="Changes are not saved in this demo">
+                Demo · read-only
+              </Badge>
+            )}
             {can('tickets', 'read') && <ReadyForEmail />}
             <NotificationBell />
             <Text size="sm">{me!.user.name}</Text>

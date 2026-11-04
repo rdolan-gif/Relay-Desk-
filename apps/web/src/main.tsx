@@ -9,7 +9,8 @@ import 'dayjs/locale/en-gb';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, MemoryRouter } from 'react-router-dom';
+import { DEMO, installDemo } from './demo/demo';
 import { App } from './App';
 import { AuthProvider } from './auth';
 
@@ -55,19 +56,26 @@ const theme = createTheme({
 });
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 10_000 } } });
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <MantineProvider theme={theme} defaultColorScheme="auto">
-      <DatesProvider settings={{ locale: 'en-gb', firstDayOfWeek: 1 }}>
-        <Notifications />
-        <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
-            <AuthProvider>
-              <App />
-            </AuthProvider>
-          </BrowserRouter>
-        </QueryClientProvider>
-      </DatesProvider>
-    </MantineProvider>
-  </StrictMode>,
-);
+// The demo build has no server and no real address bar, so it routes in memory.
+const Router = DEMO ? MemoryRouter : BrowserRouter;
+
+const start = () =>
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <MantineProvider theme={theme} defaultColorScheme="auto">
+        <DatesProvider settings={{ locale: 'en-gb', firstDayOfWeek: 1 }}>
+          <Notifications />
+          <QueryClientProvider client={queryClient}>
+            <Router>
+              <AuthProvider>
+                <App />
+              </AuthProvider>
+            </Router>
+          </QueryClientProvider>
+        </DatesProvider>
+      </MantineProvider>
+    </StrictMode>,
+  );
+
+if (DEMO) void installDemo().then(start);
+else start();

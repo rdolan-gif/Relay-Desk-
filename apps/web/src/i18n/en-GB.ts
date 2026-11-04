@@ -45,8 +45,12 @@ export const t = {
   },
   home: {
     welcome: (name: string) => `Welcome, ${name}`,
-    phase0:
-      'Tickets, CRM and email arrive in later phases. For now you can manage your account and, if you are an administrator, users and permissions.',
+    intro: 'Pick up where you left off:',
+    tickets: 'Open the ticket list',
+    newEmail: 'Write a new email',
+    kb: 'Search the knowledge base',
+    reports: 'See this month’s figures',
+    ready: 'Tip: switch on “Ready for email” at the top to have new Enquiries assigned to you.',
   },
   account: {
     title: 'My account',
