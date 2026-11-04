@@ -18,6 +18,15 @@ const schema = z.object({
   SESSION_IDLE_MINUTES: z.coerce.number().int().positive().default(120),
   SESSION_ABSOLUTE_HOURS: z.coerce.number().int().positive().default(12),
   WEB_ORIGIN: z.string().default('http://localhost:5173'),
+  /** Public base URL of the app, e.g. https://helpdesk.ricoman.com (used for Google sign-in redirects). */
+  PUBLIC_URL: z.string().default('http://localhost:5173'),
+  /** Google OAuth client for the Gmail API (owner O-2, O-10). */
+  GOOGLE_CLIENT_ID: z.string().default(''),
+  GOOGLE_CLIENT_SECRET: z.string().default(''),
+  /** Where raw emails and attachments are stored on disk. */
+  STORAGE_DIR: z.string().default('./data/storage'),
+  /** How often each mailbox is checked for new mail. */
+  MAIL_POLL_SECONDS: z.coerce.number().int().min(15).default(60),
 });
 
 export type AppConfig = z.infer<typeof schema>;

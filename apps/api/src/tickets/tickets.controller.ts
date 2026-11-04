@@ -290,6 +290,13 @@ export class TicketsController {
     return this.tickets.merge(auth, body.ticketIds, body.survivorId);
   }
 
+  @RequireAccess('tickets', 'update')
+  @Post(':id/fyi')
+  @HttpCode(200)
+  fyi(@Auth() auth: AuthContext, @Param('id', ParseIntPipe) id: number) {
+    return this.tickets.markFyi(auth, id);
+  }
+
   @RequireFlag('can_merge_tickets')
   @Post(':id/merges/:mergeId/undo')
   @HttpCode(200)

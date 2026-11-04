@@ -19,6 +19,10 @@ import {
   ticketViews,
   tickets,
   users,
+  mailboxQueues,
+  mailboxQueueCrmDatabases,
+  rightsProfileMailboxes,
+  routingRules,
 } from './schema';
 import type { FieldOption, FieldType, FormLayout } from '@relay-desk/domain';
 
@@ -87,6 +91,7 @@ export async function seed(db: Db, password = process.env.SEED_PASSWORD ?? DEFAU
       allCrmRecordTypes: true,
       allCategories: true,
       allTicketViews: true,
+      allMailboxes: true,
     },
     'Standard agent': {
       userVisibility: 'all' as const,
@@ -347,6 +352,8 @@ async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<
       await db.insert(categoryStatuses).values(statusIds.map((statusId) => ({ categoryId: row!.id, statusId })));
     return row!.id;
   };
+  const fyi = await status('FYI – no reply needed', 'gray');
+  const enquiryType = await enquiryTypeField(db);
   const support = await category(
     'Support',
     {
@@ -360,12 +367,15 @@ async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<
           {
             id: 'ticket',
             title: 'Ticket details',
-            fields: [{ fieldId: crm.fields.tier, readOnly: true, tooltip: 'From the customer record' }],
+            fields: [
+              { fieldId: enquiryType },
+              { fieldId: crm.fields.tier, readOnly: true, tooltip: 'From the customer record' },
+            ],
           },
         ],
       },
     },
-    [st.awaitingParts, st.resolved, st.duplicate],
+    [st.awaitingParts, st.resolved, st.duplicate, fyi],
   );
   const billing = await category(
     'Billing',
@@ -375,13 +385,15 @@ async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<
       multipleStatuses: true,
       defaultCrmDatabaseId: crm.customersDb,
     },
-    [st.refundIssued, st.resolved],
+    [st.refundIssued, st.resolved, fyi],
   );
   const intake = await category('Intake', { groupName: 'Back office' }, [st.resolved]);
+  const doNotReply = await category('Do not reply', { groupName: 'Back office' }, [st.resolved]);
   for (const [categoryId, access, limit] of [
     [support, true, 5],
     [billing, true, null],
     [intake, false, null],
+    [doNotReply, true, null],
   ] as const) {
     await db
       .insert(rightsProfileCategories)
@@ -424,5 +436,102 @@ async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<
       { title: 'New supplier onboarding form', categoryId: intake, priority: 'low' },
     ]);
   }
-  return { statuses: st, categories: { support, billing, intake }, views: { myOpen, unassigned } };
+  // A stand-in mailbox for development and tests (no Google account needed).
+  let [mailbox] = await db.select().from(mailboxQueues).where(eq(mailboxQueues.address, 'support@relaydesk.local'));
+  if (!mailbox) {
+    [mailbox] = await db
+      .insert(mailboxQueues)
+      .values({
+        title: 'Support (demo)',
+        address: 'support@relaydesk.local',
+        senderName: 'Relay Desk Support',
+        provider: 'fake',
+        defaultCategoryId: support,
+      })
+      .returning();
+    await db.insert(mailboxQueueCrmDatabases).values({ queueId: mailbox!.id, crmDatabaseId: crm.customersDb });
+  }
+  await db
+    .insert(rightsProfileMailboxes)
+    .values({ rightsProfileId: standardAgentRightsId, queueId: mailbox!.id })
+    .onConflictDoNothing();
+  await seedRoutingRules(db, { doNotReply, enquiryType, includeNoReply: true });
+  return {
+    statuses: { ...st, fyi },
+    categories: { support, billing, intake, doNotReply },
+    views: { myOpen, unassigned },
+    mailbox: mailbox!.id,
+    enquiryType,
+  };
+}
+
+/** "Enquiry type" drives reply targets (owner O-11): purchase orders 2h, quotes 4h, else 8h. */
+export async function enquiryTypeField(db: Db) {
+  const [existing] = await db.select().from(customFields).where(eq(customFields.key, 'enquiry_type'));
+  if (existing) return existing.id;
+  const [row] = await db
+    .insert(customFields)
+    .values({
+      key: 'enquiry_type',
+      name: 'Enquiry type',
+      type: 'select',
+      options: [
+        { value: 'purchase_order', label: 'Purchase order', sort: 1 },
+        { value: 'quotation', label: 'Quotation request', sort: 2 },
+        { value: 'general', label: 'General', sort: 3 },
+      ],
+      defaultValue: 'general',
+    })
+    .returning();
+  return row!.id;
+}
+
+/**
+ * Starter routing rules (spec 11.3 examples; owner O-11). All matching rules apply in
+ * order, so a later rule can refine an earlier one.
+ */
+export async function seedRoutingRules(
+  db: Db,
+  opts: { doNotReply?: string; enquiryType: string; includeNoReply: boolean },
+) {
+  const [any] = await db.select({ id: routingRules.id }).from(routingRules).limit(1);
+  if (any) return;
+  const rules: (typeof routingRules.$inferInsert)[] = [];
+  if (opts.includeNoReply && opts.doNotReply) {
+    rules.push({
+      title: 'No-reply senders',
+      description: 'Automated senders go to Do not reply.',
+      allConditions: [{ field: 'from', op: 'contains', value: 'noreply' }],
+      actions: { categoryId: opts.doNotReply, priority: 'low' },
+    });
+  }
+  rules.push(
+    {
+      title: 'Quotation requests',
+      description: 'Mentions of a quote or quotation in the subject or body.',
+      anyConditions: [
+        { field: 'subject', op: 'regex', value: '\\bquot(e|es|ation|ations)\\b' },
+        { field: 'body', op: 'regex', value: '\\b(request|need|send|provide)\\b.{0,40}\\bquot(e|ation)\\b' },
+      ],
+      actions: { customFields: { [opts.enquiryType]: 'quotation' } },
+    },
+    {
+      title: 'Purchase orders',
+      description: 'A purchase order or PO number in the subject or body (checked after quotes, so it wins).',
+      anyConditions: [
+        {
+          field: 'subject',
+          op: 'regex',
+          value: '\\bpurchase\\s+order\\b|\\bP\\.?O\\.?\\s*(no\\.?|number|#)?\\s*[:#-]?\\s*\\d{3,}',
+        },
+        {
+          field: 'body',
+          op: 'regex',
+          value: '\\bpurchase\\s+order\\b|\\bP\\.?O\\.?\\s*(no\\.?|number|#)\\s*[:#-]?\\s*\\d{3,}',
+        },
+      ],
+      actions: { customFields: { [opts.enquiryType]: 'purchase_order' } },
+    },
+  );
+  for (const [position, r] of rules.entries()) await db.insert(routingRules).values({ ...r, position });
 }

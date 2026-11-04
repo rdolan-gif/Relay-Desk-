@@ -17,3 +17,8 @@ export * from './tickets/save-rules.js';
 export * from './tickets/rights.js';
 export * from './tickets/mentions.js';
 export * from './crm/accounts.js';
+export * from './email/addresses.js';
+export * from './email/automated.js';
+export * from './email/threading.js';
+export * from './email/routing.js';
+export * from './email/templates.js';

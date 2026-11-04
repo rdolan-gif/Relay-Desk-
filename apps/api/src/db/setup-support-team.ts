@@ -2,7 +2,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { fullAccessProfile } from '@relay-desk/domain';
 import { PasswordService } from '../auth/password.service';
 import { createDb, createPool, type Db } from './db';
-import { DEFAULT_SEED_PASSWORD, seed } from './seed';
+import { DEFAULT_SEED_PASSWORD, enquiryTypeField, seed, seedRoutingRules } from './seed';
 import type { Address } from '@relay-desk/domain';
 import {
   accessProfiles,
@@ -13,6 +13,9 @@ import {
   contacts,
   crmDatabases,
   rightsProfileCategories,
+  rightsProfileMailboxes,
+  mailboxQueues,
+  mailboxQueueCrmDatabases,
   rightsProfileCrmDatabases,
   rightsProfileTicketViews,
   rightsProfiles,
@@ -55,7 +58,10 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
     await status('Awaiting supplier', 'orange'),
     await status('Quote sent', 'blue'),
     await status('Resolved', 'green'),
+    await status('FYI – no reply needed', 'gray'),
   ];
+  const enquiryType = await enquiryTypeField(db);
+  const enquiryLayout = { sections: [{ id: 'enquiry', title: 'Enquiry', fields: [{ fieldId: enquiryType, tooltip: 'Sets the reply target: purchase order 2 h, quote 4 h, other 8 h (working hours).' }] }] };
 
   const [customers] = await db
     .select()
@@ -143,8 +149,31 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
     Heather: await rights('Support – Heather', PERSONAL.Heather!, false),
   };
 
+  // The four Gmail inboxes (owner O-1, O-10). Addresses can be corrected in Settings > Mailboxes;
+  // each is connected with "Connect Gmail" once Google sign-in is set up.
+  const mailbox = async (title: string, address: string, categoryTitle: string, senderName: string) => {
+    const [row] = await db.select().from(mailboxQueues).where(and(eq(mailboxQueues.address, address), isNull(mailboxQueues.deletedAt)));
+    if (row) return row.id;
+    const [m] = await db.insert(mailboxQueues).values({ title, address, senderName, provider: 'gmail', defaultCategoryId: cat[categoryTitle]! }).returning();
+    if (customers) await db.insert(mailboxQueueCrmDatabases).values({ queueId: m!.id, crmDatabaseId: customers.id });
+    return m!.id;
+  };
+  const boxes = {
+    support: await mailbox('Support inbox', 'support@ricoman.com', 'Enquiries', 'Ricoman Support'),
+    Ryan: await mailbox("Ryan's inbox", 'ryan@ricoman.com', PERSONAL.Ryan!, 'Ryan – Ricoman'),
+    Thierry: await mailbox("Thierry's inbox", 'thierry@ricoman.com', PERSONAL.Thierry!, 'Thierry – Ricoman'),
+    Heather: await mailbox("Heather's inbox", 'heather@ricoman.com', PERSONAL.Heather!, 'Heather – Ricoman'),
+  };
+  // Everyone can reply from Support; each person also from their own inbox.
+  for (const [key, profileId] of Object.entries(rp)) {
+    const allowed = [boxes.support, ...(key in boxes ? [boxes[key as keyof typeof boxes]] : [])];
+    for (const queueId of allowed) await db.insert(rightsProfileMailboxes).values({ rightsProfileId: profileId, queueId }).onConflictDoNothing();
+  }
+  // Enquiry type from the subject/body (owner O-11). No automatic filtering (owner O-12).
+  await seedRoutingRules(db, { enquiryType, includeNoReply: false });
+
   if (opts.demo) await demoData(db, rp, cat, views, opts.password ?? DEFAULT_SEED_PASSWORD);
-  return { categories: cat, views, rightsProfiles: rp };
+  return { categories: cat, views, rightsProfiles: rp, mailboxes: boxes };
 }
 
 /** Demo people and tickets for showing the trial (development only; fictitious customers). */

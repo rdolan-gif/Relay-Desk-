@@ -1,9 +1,9 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { automaticState, followersToAdd, newMentions } from '@relay-desk/domain';
 import type { AuthContext } from '../common/request-context';
 import { DB, type Db } from '../db/db';
-import { activities, tickets, users } from '../db/schema';
+import { activities, attachments, emailMessages, tickets, users } from '../db/schema';
 import { HistoryService } from '../history/history.service';
 import { htmlToText, sanitizeRich } from './sanitize';
 import { TicketSettingsService } from './ticket-settings.service';
@@ -30,12 +30,38 @@ export class ActivitiesService {
   async list(auth: AuthContext, ticketId: number) {
     await this.ticketsService.find(auth, ticketId);
     const rows = await this.db
-      .select({ activity: activities, userName: users.name })
+      .select({ activity: activities, userName: users.name, email: emailMessages })
       .from(activities)
       .leftJoin(users, eq(users.id, activities.userId))
+      .leftJoin(emailMessages, eq(emailMessages.activityId, activities.id))
       .where(and(eq(activities.ticketId, ticketId), isNull(activities.deletedAt)))
       .orderBy(asc(activities.createdAt), asc(activities.id));
-    return rows.map((r) => ({ ...publicActivity(r.activity), userName: r.userName }));
+    const ids = rows.map((r) => r.activity.id);
+    const files = ids.length
+      ? await this.db
+          .select()
+          .from(attachments)
+          .where(and(eq(attachments.ownerType, 'activity'), inArray(attachments.ownerId, ids)))
+      : [];
+    return rows.map((r) => ({
+      ...publicActivity(r.activity),
+      userName: r.userName,
+      email: r.email
+        ? {
+            queueId: r.email.queueId,
+            from: r.email.from,
+            to: r.email.to,
+            cc: r.email.cc,
+            bcc: r.email.bcc,
+            replyTo: r.email.replyTo,
+            subject: r.email.subject,
+            classification: r.email.classification,
+          }
+        : null,
+      attachments: files
+        .filter((f) => f.ownerId === r.activity.id)
+        .map((f) => ({ id: f.id, filename: f.filename, mime: f.mime, size: f.size, inline: f.inline })),
+    }));
   }
 
   /**
@@ -180,6 +206,9 @@ export function publicActivity(a: ActivityRow) {
     isExternal: a.isExternal,
     bodyHtml: a.bodyHtml,
     mentionUserIds: a.mentionUserIds,
+    suggestedTicketIds: a.suggestedTicketIds,
+    isAutomatic: a.isAutomatic,
+    error: a.error,
     createdAt: a.createdAt,
     editedAt: a.editedAt,
   };

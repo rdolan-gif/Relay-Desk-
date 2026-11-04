@@ -19,6 +19,8 @@ import {
   diffFields,
   flattenForHistory,
   isResolved,
+  layoutPlacements,
+  validateFieldValue,
   resolveState,
   visibleCategoryIds,
   wouldCreateCycle,
@@ -182,6 +184,67 @@ export class TicketsService {
       total,
       q,
     );
+  }
+
+  /**
+   * Creates a ticket for the email channel (inbound mail, or a new outbound email). Never
+   * refuses because of form rules: invalid routing values are dropped instead, so no
+   * email is lost (spec 2, goal 1). `auth` is null for mail arriving from a mailbox.
+   */
+  async createSystemTicket(
+    tx: DbOrTx,
+    auth: AuthContext | null,
+    f: {
+      title: string;
+      categoryId: string;
+      state: TicketState;
+      priority: Priority;
+      userId: string | null;
+      contactId: string | null;
+      statusIds: string[];
+      customFields: Record<string, unknown>;
+    },
+  ): Promise<number> {
+    const [cat] = await tx
+      .select()
+      .from(categories)
+      .where(and(eq(categories.id, f.categoryId), isNull(categories.deletedAt)));
+    if (!cat) throw new NotFoundException({ message: 'Unknown category.', reason: 'unknown_category' });
+    const allowed = await this.settings.allowedStatusIds(cat.id);
+    const statusIds = f.statusIds.filter((s) => allowed.includes(s)).slice(0, cat.multipleStatuses ? 20 : 1);
+    let userId = f.userId;
+    if (userId) {
+      const [u] = await tx.select().from(users).where(eq(users.id, userId));
+      if (!u || !u.isActive || u.type === 'external') userId = null;
+    }
+    // Custom values: defaults for the category form, then routing values that are on it and valid.
+    const fieldMap = await this.fieldsService.map();
+    const custom: Record<string, unknown> = {};
+    for (const p of layoutPlacements(cat.formLayout)) {
+      const def = fieldMap.get(p.fieldId);
+      if (!def) continue;
+      const raw = f.customFields[p.fieldId] ?? f.customFields[def.key] ?? def.defaultValue;
+      if (raw === undefined || raw === null) continue;
+      const r = validateFieldValue(def, raw);
+      if (r.ok && r.value !== null) custom[p.fieldId] = r.value;
+    }
+    const [row] = await tx
+      .insert(tickets)
+      .values({
+        title: f.title.trim().slice(0, 500) || '(no subject)',
+        categoryId: cat.id,
+        state: f.state,
+        priority: f.priority,
+        userId,
+        contactId: f.contactId,
+        statusIds,
+        closedAt: isResolved(f.state) ? new Date() : null,
+        customFields: custom,
+        createdById: auth?.user.id ?? null,
+      })
+      .returning();
+    await this.history.record(tx, auth, 'ticket', row!.id, 'create', diffFields({}, ticketFlat(row!, [])));
+    return row!.id;
   }
 
   /** Tickets whose contact belongs to one of these accounts (a branch, or a company and its branches). */
@@ -748,6 +811,31 @@ export class TicketsService {
     return this.get(auth, survivorId);
   }
 
+  /**
+   * "FYI – no reply needed" (owner O-12): closes the ticket and marks that no reply is
+   * expected, so it never counts against the reply target. Adds an "FYI" status when the
+   * category offers one.
+   */
+  async markFyi(auth: AuthContext, id: number) {
+    const t = await this.find(auth, id);
+    this.assertNotArchived(t);
+    const allowed = await this.settings.allowedStatusIds(t.categoryId);
+    const statuses = await this.settings.listStatuses();
+    const fyi = statuses.find((s) => /^fyi\b/i.test(s.title) && allowed.includes(s.id));
+    const category = await this.settings.findCategory(t.categoryId);
+    const statusIds = fyi
+      ? category.multipleStatuses
+        ? [...new Set([...t.statusIds, fyi.id])]
+        : [fyi.id]
+      : t.statusIds;
+    const result = await this.update(auth, id, { state: 'closed', statusIds }, 'form');
+    await this.db.update(tickets).set({ noReplyNeeded: true }).where(eq(tickets.id, id));
+    await this.db.transaction((tx) =>
+      this.history.record(tx, auth, 'ticket', id, 'update', [{ field: 'noReplyNeeded', old: false, new: true }]),
+    );
+    return result;
+  }
+
   /** Merges into this ticket that can still be undone. */
   async activeMerges(id: number) {
     return this.db
@@ -960,5 +1048,7 @@ export function publicTicket(t: Row) {
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
     lastActivityAt: t.lastActivityAt,
+    firstAnswerAt: t.firstAnswerAt,
+    noReplyNeeded: t.noReplyNeeded,
   };
 }

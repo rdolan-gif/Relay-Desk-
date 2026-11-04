@@ -6,6 +6,7 @@ import {
   accessProfiles,
   rightsProfileCategories,
   rightsProfileTicketViews,
+  rightsProfileMailboxes,
   rightsProfileCrmDatabases,
   rightsProfileCrmRecordTypes,
   rightsProfileEditableAccessProfiles,
@@ -17,7 +18,7 @@ import {
 
 export type UserRow = typeof users.$inferSelect;
 
-export const NO_TICKET_RIGHTS: TicketRights = { categories: [], ticketViews: [] };
+export const NO_TICKET_RIGHTS: TicketRights = { categories: [], ticketViews: [], mailboxes: [] };
 
 const NO_RIGHTS: RightsProfile = {
   userVisibility: 'selected',
@@ -90,7 +91,15 @@ export class PermissionsService {
             .from(rightsProfileTicketViews)
             .where(eq(rightsProfileTicketViews.rightsProfileId, rp.id))
         ).map((v) => v.id);
-    return { categories: cats, ticketViews: views };
+    const mailboxes = rp.allMailboxes
+      ? 'all'
+      : (
+          await tx
+            .select({ id: rightsProfileMailboxes.queueId })
+            .from(rightsProfileMailboxes)
+            .where(eq(rightsProfileMailboxes.rightsProfileId, rp.id))
+        ).map((m) => m.id);
+    return { categories: cats, ticketViews: views, mailboxes };
   }
 
   async loadRights(rightsProfileId: string, tx: DbOrTx = this.db): Promise<RightsProfile | null> {

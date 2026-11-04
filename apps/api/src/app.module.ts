@@ -47,6 +47,23 @@ import {
 } from './tickets/tickets.controller';
 import { TicketsService } from './tickets/tickets.service';
 import { ViewsService } from './tickets/views.service';
+import {
+  EmailController,
+  GoogleCallbackController,
+  MailboxSettingsController,
+  RoutingRulesController,
+  TemplatesController,
+} from './email/email.controller';
+import { GmailProvider } from './email/gmail.provider';
+import { GoogleOAuthService } from './email/google-oauth.service';
+import { InboundService } from './email/inbound.service';
+import { MailJobsService } from './email/mail-jobs.service';
+import { MailboxesService } from './email/mailboxes.service';
+import { OutboundService } from './email/outbound.service';
+import { FakeMailProvider, MAIL_PROVIDERS, type MailProviders } from './email/providers';
+import { RoutingRulesService } from './email/routing-rules.service';
+import { TemplatesService } from './email/templates.service';
+import { StorageService } from './storage/storage.service';
 
 class PoolCloser implements OnApplicationShutdown {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
@@ -88,6 +105,11 @@ export class AppModule {
         TicketMetaController,
         TicketViewsController,
         TicketsController,
+        MailboxSettingsController,
+        GoogleCallbackController,
+        RoutingRulesController,
+        TemplatesController,
+        EmailController,
       ],
       providers: [
         { provide: CONFIG, useValue: config },
@@ -115,6 +137,26 @@ export class AppModule {
         ActivitiesService,
         ViewsService,
         TicketJobsService,
+        StorageService,
+        GoogleOAuthService,
+        MailboxesService,
+        RoutingRulesService,
+        TemplatesService,
+        OutboundService,
+        InboundService,
+        MailJobsService,
+        FakeMailProvider,
+        {
+          provide: MAIL_PROVIDERS,
+          useFactory: (fake: FakeMailProvider): MailProviders => ({
+            gmail: new GmailProvider(() => ({
+              clientId: config.GOOGLE_CLIENT_ID,
+              clientSecret: config.GOOGLE_CLIENT_SECRET,
+            })),
+            fake,
+          }),
+          inject: [FakeMailProvider],
+        },
         { provide: APP_GUARD, useClass: AuthGuard },
       ],
     };

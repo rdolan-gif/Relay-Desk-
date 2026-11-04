@@ -1,6 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import request from 'supertest';
+import { tmpdir } from 'node:os';
 import { createApp } from '../src/app.factory';
 import { loadConfig } from '../src/config/config';
 import { createDb, createPool } from '../src/db/db';
@@ -22,7 +23,8 @@ export async function createTestContext(): Promise<TestContext> {
   const pool = createPool(TEST_DATABASE_URL);
   const db = createDb(pool);
   await db.execute(sql`
-    TRUNCATE sidebar_items, rights_profile_ticket_views, ticket_views, activities, ticket_favourites,
+    TRUNCATE inbound_log, email_messages, attachments, email_templates, routing_rules, rights_profile_mailboxes,
+      mailbox_queue_crm_databases, mailbox_queues, ticket_merges, sidebar_items, rights_profile_ticket_views, ticket_views, activities, ticket_favourites,
       ticket_followers, tickets, rights_profile_categories, category_statuses, categories, ticket_statuses,
       history_entries, filter_schemes, list_preferences, crm_records, contacts, accounts,
       rights_profile_crm_databases, rights_profile_crm_record_types, crm_record_types, crm_databases,
@@ -33,7 +35,11 @@ export async function createTestContext(): Promise<TestContext> {
   const ids = await seed(db, PASSWORD);
   await pool.end();
 
-  const config = loadConfig({ NODE_ENV: 'test', DATABASE_URL: TEST_DATABASE_URL } as NodeJS.ProcessEnv);
+  const config = loadConfig({
+    NODE_ENV: 'test',
+    DATABASE_URL: TEST_DATABASE_URL,
+    STORAGE_DIR: `${tmpdir()}/relay-desk-test-storage`,
+  } as NodeJS.ProcessEnv);
   const app = await createApp(config, { logger: false });
   await app.init();
   return { app, ids, close: () => app.close() };

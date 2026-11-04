@@ -25,6 +25,8 @@ import type {
   ModuleAccessMap,
   RecordStatusDef,
   RecordStage,
+  RoutingActions,
+  RoutingCondition,
   Priority,
   StatusRequired,
   TicketState,
@@ -67,6 +69,7 @@ export const rightsProfiles = pgTable(
     allCrmRecordTypes: boolean('all_crm_record_types').notNull().default(false),
     allCategories: boolean('all_categories').notNull().default(false),
     allTicketViews: boolean('all_ticket_views').notNull().default(false),
+    allMailboxes: boolean('all_mailboxes').notNull().default(false),
     ...timestamps,
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -493,6 +496,10 @@ export const tickets = pgTable(
     version: integer('version').notNull().default(1),
     ...timestamps,
     lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
+    /** First qualifying reply to the customer (spec 8, "What counts as a response"). */
+    firstAnswerAt: timestamp('first_answer_at', { withTimezone: true }),
+    /** Closed as "FYI – no reply needed" (owner O-12): no reply target applies. */
+    noReplyNeeded: boolean('no_reply_needed').notNull().default(false),
     isAnonymised: boolean('is_anonymised').notNull().default(false),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -554,6 +561,14 @@ export const activities = pgTable(
       .notNull()
       .default(sql`'{}'::uuid[]`),
     repliedToActivityId: uuid('replied_to_activity_id'),
+    /** Other tickets this inbound email's headers also matched (spec 6.2 suggested-ticket banner). */
+    suggestedTicketIds: integer('suggested_ticket_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::integer[]`),
+    /** Sent automatically (auto-response): never counts as a reply (spec 8). */
+    isAutomatic: boolean('is_automatic').notNull().default(false),
+    error: text('error'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     editedAt: timestamp('edited_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -631,3 +646,176 @@ export const ticketMerges = pgTable(
   },
   (t) => [index('ticket_merges_survivor_idx').on(t.survivorId)],
 );
+
+// ---------------------------------------------------------------- Email (Phase 3)
+
+/** A connected mailbox (spec 11.1). Credentials are encrypted with SecretBox. */
+export const mailboxQueues = pgTable(
+  'mailbox_queues',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    title: text('title').notNull(),
+    /** Lower-cased mailbox address, e.g. support@ricoman.com. */
+    address: text('address').notNull(),
+    senderName: text('sender_name').notNull().default(''),
+    provider: text('provider').$type<'gmail' | 'fake'>().notNull().default('gmail'),
+    defaultCategoryId: uuid('default_category_id')
+      .notNull()
+      .references(() => categories.id),
+    headerThreading: boolean('header_threading').notNull().default(true),
+    active: boolean('active').notNull().default(true),
+    autoResponseEnabled: boolean('auto_response_enabled').notNull().default(false),
+    autoResponseNewOnly: boolean('auto_response_new_only').notNull().default(true),
+    autoResponseTemplateId: uuid('auto_response_template_id'),
+    defaultBodyTemplateId: uuid('default_body_template_id'),
+    credentialsEnc: text('credentials_enc'),
+    connectedAs: text('connected_as'),
+    syncCursor: text('sync_cursor'),
+    lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    ...timestamps,
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('mailbox_queues_address_uq')
+      .on(t.address)
+      .where(sql`deleted_at IS NULL`),
+  ],
+);
+
+/** CRM databases searched for the sender of mail arriving in a mailbox (spec 11.1, 12.3). */
+export const mailboxQueueCrmDatabases = pgTable(
+  'mailbox_queue_crm_databases',
+  {
+    queueId: uuid('queue_id')
+      .notNull()
+      .references(() => mailboxQueues.id, { onDelete: 'cascade' }),
+    crmDatabaseId: uuid('crm_database_id')
+      .notNull()
+      .references(() => crmDatabases.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.queueId, t.crmDatabaseId] })],
+);
+
+/** Mailboxes a rights profile may send from (spec 4). */
+export const rightsProfileMailboxes = pgTable(
+  'rights_profile_mailboxes',
+  {
+    rightsProfileId: uuid('rights_profile_id')
+      .notNull()
+      .references(() => rightsProfiles.id, { onDelete: 'cascade' }),
+    queueId: uuid('queue_id')
+      .notNull()
+      .references(() => mailboxQueues.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.rightsProfileId, t.queueId] })],
+);
+
+export interface MailAddressJson {
+  name?: string;
+  address: string;
+}
+
+/** The email part of an email activity (spec 5). */
+export const emailMessages = pgTable(
+  'email_messages',
+  {
+    activityId: uuid('activity_id')
+      .primaryKey()
+      .references(() => activities.id, { onDelete: 'cascade' }),
+    queueId: uuid('queue_id').references(() => mailboxQueues.id),
+    providerMessageId: text('provider_message_id'),
+    providerThreadId: text('provider_thread_id'),
+    messageId: text('message_id'),
+    inReplyTo: text('in_reply_to'),
+    references: text('references')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    from: jsonb('from').$type<MailAddressJson>().notNull(),
+    to: jsonb('to').$type<MailAddressJson[]>().notNull().default([]),
+    cc: jsonb('cc').$type<MailAddressJson[]>().notNull().default([]),
+    bcc: jsonb('bcc').$type<MailAddressJson[]>().notNull().default([]),
+    replyTo: jsonb('reply_to').$type<MailAddressJson[]>().notNull().default([]),
+    subject: text('subject').notNull().default(''),
+    bodyText: text('body_text').notNull().default(''),
+    classification: text('classification').notNull().default('normal'),
+    rawStorageKey: text('raw_storage_key'),
+    scheduledFor: timestamp('scheduled_for', { withTimezone: true }),
+  },
+  (t) => [index('email_messages_message_id_idx').on(t.messageId), index('email_messages_queue_idx').on(t.queueId)],
+);
+
+/** Every message fetched from a mailbox, so restarts never duplicate or skip mail (spec 11.1). */
+export const inboundLog = pgTable(
+  'inbound_log',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    queueId: uuid('queue_id')
+      .notNull()
+      .references(() => mailboxQueues.id),
+    providerMessageId: text('provider_message_id').notNull(),
+    outcome: text('outcome').notNull(),
+    ticketId: integer('ticket_id'),
+    activityId: uuid('activity_id'),
+    detail: text('detail'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('inbound_log_queue_msg_uq').on(t.queueId, t.providerMessageId)],
+);
+
+export const attachments = pgTable(
+  'attachments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** 'activity' once attached; 'upload' while waiting to be sent with an email. */
+    ownerType: text('owner_type').$type<'activity' | 'upload'>().notNull(),
+    ownerId: text('owner_id').notNull(),
+    filename: text('filename').notNull(),
+    mime: text('mime').notNull(),
+    size: integer('size').notNull(),
+    storageKey: text('storage_key').notNull(),
+    checksum: text('checksum').notNull(),
+    contentId: text('content_id'),
+    inline: boolean('inline').notNull().default(false),
+    createdById: uuid('created_by_id').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('attachments_owner_idx').on(t.ownerType, t.ownerId)],
+);
+
+/** Ordered email routing rules (spec 11.3); all matching rules apply in order (owner S-3). */
+export const routingRules = pgTable('routing_rules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  description: text('description').notNull().default(''),
+  direction: text('direction').$type<'incoming' | 'outgoing' | 'both'>().notNull().default('incoming'),
+  active: boolean('active').notNull().default(true),
+  position: integer('position').notNull().default(0),
+  allConditions: jsonb('all_conditions').$type<RoutingCondition[]>().notNull().default([]),
+  anyConditions: jsonb('any_conditions').$type<RoutingCondition[]>().notNull().default([]),
+  actions: jsonb('actions').$type<RoutingActions>().notNull().default({}),
+  ...timestamps,
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+});
+
+/** Reply templates, auto-responses and default bodies, written by the team (owner O-6). */
+export const emailTemplates = pgTable('email_templates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  kind: text('kind').$type<'reply' | 'auto_response' | 'default_body'>().notNull().default('reply'),
+  title: text('title').notNull(),
+  subject: text('subject'),
+  bodyHtml: text('body_html').notNull().default(''),
+  /** Empty = every mailbox / category. */
+  queueIds: uuid('queue_ids')
+    .array()
+    .notNull()
+    .default(sql`'{}'::uuid[]`),
+  categoryIds: uuid('category_ids')
+    .array()
+    .notNull()
+    .default(sql`'{}'::uuid[]`),
+  createdById: uuid('created_by_id').references(() => users.id),
+  ...timestamps,
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+});

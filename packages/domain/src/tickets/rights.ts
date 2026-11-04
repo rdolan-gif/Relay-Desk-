@@ -10,6 +10,12 @@ export interface TicketRights {
   categories: 'all' | readonly CategoryRight[];
   /** Team views shown in the user's sidebar. */
   ticketViews: 'all' | readonly string[];
+  /** Mailboxes the user can send from and is "logged in to" for distribution (spec 4). */
+  mailboxes: 'all' | readonly string[];
+}
+
+export function canUseMailbox(rights: TicketRights, queueId: string): boolean {
+  return rights.mailboxes === 'all' || rights.mailboxes.includes(queueId);
 }
 
 /** A user can create tickets in any category in their rights, regardless of Access. */

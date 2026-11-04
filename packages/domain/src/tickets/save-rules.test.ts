@@ -190,6 +190,7 @@ describe('category rights (spec 4)', () => {
       { categoryId: 'intake', access: false, distributionLimit: null },
     ],
     ticketViews: [],
+    mailboxes: [],
   };
   it('with Access = No the user can create a ticket in the category but not see it', () => {
     expect(canCreateInCategory(rights, 'intake')).toBe(true);
