@@ -57,7 +57,7 @@ test("a comment by someone other than the ticket's User reopens a closed ticket"
 test('team views appear in the sidebar and filter the list', async ({ page }) => {
   await login(page, 'agent@relaydesk.local');
   await page.goto('/tickets');
-  await page.getByRole('navigation', { name: 'Ticket views' }).getByText('My open tickets', { exact: true }).click();
+  await page.getByRole('navigation', { name: 'Ticket views' }).getByText('My open tickets', { exact: true }).first().click();
   await expect(page.getByRole('heading', { name: 'My open tickets' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Printer jams on every second page' })).toBeVisible();
 });

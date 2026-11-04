@@ -57,6 +57,8 @@ export interface Ticket {
   noReplyNeeded?: boolean;
   closedAt?: string | null;
   isAnonymised?: boolean;
+  /** Open, with activity since the current user last opened it. */
+  unread?: boolean;
   sla?: TicketSla | null;
   categoryTitle?: string;
   userName?: string | null;

@@ -46,6 +46,7 @@ import {
   ticketMerges,
   tickets,
   users,
+  ticketReads,
 } from '../db/schema';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DistributionService } from '../sla/distribution.service';
@@ -167,11 +168,13 @@ export class TicketsService {
         userName: users.name,
         contactName: contacts.name,
         contactDatabaseId: contacts.databaseId,
+        readAt: ticketReads.readAt,
       })
       .from(tickets)
       .innerJoin(categories, eq(categories.id, tickets.categoryId))
       .leftJoin(users, eq(users.id, tickets.userId))
       .leftJoin(contacts, eq(contacts.id, tickets.contactId))
+      .leftJoin(ticketReads, and(eq(ticketReads.ticketId, tickets.id), eq(ticketReads.userId, auth.user.id)))
       .where(cond)
       // Newest first unless the user picked a sort (Q-P2-14).
       .orderBy(q.sort && q.dir === 'asc' ? asc(sortCol) : desc(sortCol), desc(tickets.id))
@@ -189,6 +192,8 @@ export class TicketsService {
         categoryTitle: r.categoryTitle,
         userName: r.userName,
         contactName: r.contactDatabaseId && canSeeCrmDatabase(auth.rights, r.contactDatabaseId) ? r.contactName : null,
+        // Open with activity since this person last opened it (owner request: shown in bold).
+        unread: r.ticket.state === 'open' && (!r.readAt || r.readAt < r.ticket.lastActivityAt),
       })),
       total,
       q,
@@ -321,6 +326,7 @@ export class TicketsService {
 
   async get(auth: AuthContext, id: number) {
     const t = await this.find(auth, id);
+    await this.markRead(auth.user.id, id);
     const category = await this.settings.getCategory(auth, t.categoryId);
     const followerRows = await this.db
       .select({ id: users.id, name: users.name })
@@ -370,6 +376,14 @@ export class TicketsService {
       merges: await this.activeMerges(id),
       sla: (await this.sla.describe([t])).get(t.id) ?? null,
     };
+  }
+
+  /** Opening a ticket marks it read for this person. */
+  async markRead(userId: string, ticketId: number) {
+    await this.db
+      .insert(ticketReads)
+      .values({ userId, ticketId, readAt: new Date() })
+      .onConflictDoUpdate({ target: [ticketReads.userId, ticketReads.ticketId], set: { readAt: new Date() } });
   }
 
   /** Compact contact card (spec 12.5): name, account, counts and other open tickets. */

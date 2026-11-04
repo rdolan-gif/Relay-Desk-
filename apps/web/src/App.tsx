@@ -150,7 +150,7 @@ function Shell() {
           </Group>
         </Group>
       </AppShell.Header>
-      <AppShell.Navbar p="xs" component="nav" aria-label="Main">
+      <AppShell.Navbar p="xs" component="nav" aria-label="Main" className="rd-navbar">
         <NavLink component={RouterLink} to="/" label={t.nav.home} active={location.pathname === '/'} />
         {can('tickets', 'read') && (
           <NavLink

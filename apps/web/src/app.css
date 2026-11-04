@@ -1,0 +1,38 @@
+/* Unread marker beside a ticket title (with bold text, so it is not colour alone). */
+.rd-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--mantine-color-ricoman-6);
+}
+[data-mantine-color-scheme='dark'] .rd-unread-dot {
+  background: var(--mantine-color-ricoman-3);
+}
+
+/* Main menu in Ricoman blue in light mode (owner request); dark mode keeps the dark surface. */
+[data-mantine-color-scheme='light'] .rd-navbar {
+  background: var(--mantine-color-ricoman-6);
+  border-right-color: var(--mantine-color-ricoman-7);
+  color: #fff;
+}
+[data-mantine-color-scheme='light'] .rd-navbar .mantine-NavLink-root {
+  color: #fff;
+  border-radius: var(--mantine-radius-sm);
+}
+[data-mantine-color-scheme='light'] .rd-navbar .mantine-NavLink-root:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+[data-mantine-color-scheme='light'] .rd-navbar .mantine-NavLink-root[data-active] {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  box-shadow: inset 3px 0 0 var(--mantine-color-amber-6);
+}
+[data-mantine-color-scheme='light'] .rd-navbar .mantine-NavLink-root:focus-visible {
+  outline: 2px solid var(--mantine-color-amber-5);
+  outline-offset: -2px;
+}
+[data-mantine-color-scheme='light'] .rd-navbar .mantine-NavLink-chevron,
+[data-mantine-color-scheme='light'] .rd-navbar .mantine-NavLink-label {
+  color: inherit;
+}

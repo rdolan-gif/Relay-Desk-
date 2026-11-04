@@ -180,6 +180,14 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 | O-15 | Closing tickets      | The system never closes a ticket; only an agent does, so no enquiry is lost. A new outgoing email now opens its ticket as Open (spec 6.3 said Closed), and routing rules can no longer close tickets. Deadlines never close anything; they only show a ticket as overdue.                        | Built  |
 | O-16 | Automatic assignment | New Enquiries go automatically to whoever has the fewest open ones, with **no cap**. Agents then merge the ticket into the right one or reassign it (e.g. to Heather if she is named). Ready for email stays on until the person turns it off (e.g. for holidays), not just until they sign out. | Built  |
 
+## Owner requests, 04/11/2026 (cosmetic)
+
+| #    | Topic          | Decision                                                                                                                                                                                                                                                                                                     | Status |
+| ---- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| O-17 | Main menu      | The left-hand menu is Ricoman blue in light mode (white text, amber marker on the current page). Dark mode is unchanged.                                                                                                                                                                                     | Built  |
+| O-18 | Unread tickets | An Open ticket is bold, with a blue dot, until the person opens it; it turns bold again if new activity arrives. Read state is per person (`ticket_reads`).                                                                                                                                                  | Built  |
+| O-19 | My views       | Arrows and ✕ are replaced: drag ⠿ to reorder, which asks "Save changes?"; swipe a view left (mouse or touch) to reveal a bin, which asks "Are you sure…?" before deleting your own view or removing a pinned team view. Keyboard: Space on ⠿, arrow keys, Space to drop; Delete on a view asks to delete it. | Built  |
+
 ## Proposed (awaiting owner confirmation)
 
 - _Built in Phase 4 (Q-P4-2); kept here for the record._

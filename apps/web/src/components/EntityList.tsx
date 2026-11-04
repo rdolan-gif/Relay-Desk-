@@ -47,6 +47,8 @@ interface Props<T extends { id: string | number }> {
   filterChoices?: Record<string, { value: string; label: string }[]>;
   onOpen: (row: T) => void;
   actions?: ReactNode;
+  /** Rows to emphasise in bold (e.g. unread tickets). */
+  rowBold?: (row: T) => boolean;
   /** Shows Export (CSV / Excel of the filtered list and visible columns) when the user may export. */
   exportEntity?: 'contacts' | 'accounts' | 'tickets';
 }
@@ -300,7 +302,7 @@ export function EntityList<T extends { id: string | number }>(props: Props<T>) {
             <Table.Tr
               key={row.id}
               onClick={() => props.onOpen(row)}
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: 'pointer', fontWeight: props.rowBold?.(row) ? 700 : undefined }}
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && props.onOpen(row)}
             >

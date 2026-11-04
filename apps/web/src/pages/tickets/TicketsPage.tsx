@@ -12,7 +12,9 @@ import {
   Text,
   TextInput,
   Tooltip,
+  VisuallyHidden,
 } from '@mantine/core';
+import { MyViewsList } from '../../components/MyViewsList';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -103,17 +105,25 @@ export function TicketsPage() {
   const viewsById = new Map([...sb.teamViews, ...sb.myViews].map((v) => [v.id, v]));
   const items = [...sb.items].sort((a, b) => a.position - b.position);
   const pinned = new Set(items.map((i) => i.viewId));
-  const reorder = (from: number, to: number) => {
-    const next = [...items];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved!);
-    saveSidebar.mutate(next.map((i, position) => ({ ...i, position })));
-  };
   const statusTitle = (id: string) => meta.data!.statuses.find((s) => s.id === id)?.title ?? '';
   const tz = me!.user.timezone;
   const columns: Column<Ticket>[] = [
     { key: 'id', label: t.tickets.id, render: (r) => `#${r.id}`, sortKey: 'id' },
-    { key: 'title', label: t.tickets.titleField, render: (r) => r.title, sortKey: 'title' },
+    {
+      key: 'title',
+      label: t.tickets.titleField,
+      render: (r) =>
+        r.unread ? (
+          <Group gap={6} wrap="nowrap">
+            <span className="rd-unread-dot" aria-hidden />
+            <VisuallyHidden>{t.tickets.unread}: </VisuallyHidden>
+            {r.title}
+          </Group>
+        ) : (
+          r.title
+        ),
+      sortKey: 'title',
+    },
     { key: 'contactName', label: t.tickets.contact, render: (r) => r.contactName ?? t.crm.none },
     { key: 'categoryTitle', label: t.tickets.category, render: (r) => r.categoryTitle },
     {
@@ -175,48 +185,25 @@ export function TicketsPage() {
           <Text size="xs" fw={700} c="dimmed" mt="sm">
             {t.tickets.myViews}
           </Text>
-          {items.map((i, idx) => {
-            const v = viewsById.get(i.viewId);
-            if (!v) return null;
-            return (
-              <Group key={i.viewId} gap={0} wrap="nowrap" pl={i.parentViewId ? 'md' : 0}>
-                <NavLink
-                  label={v.name}
-                  description={i.folder ?? undefined}
-                  active={viewId === v.id}
-                  onClick={() => setParams({ view: v.id })}
-                  style={{ flex: 1 }}
-                />
-                <ActionIcon
-                  size="xs"
-                  variant="subtle"
-                  aria-label={`${t.tickets.moveUp}: ${v.name}`}
-                  disabled={idx === 0}
-                  onClick={() => reorder(idx, idx - 1)}
-                >
-                  ↑
-                </ActionIcon>
-                <ActionIcon
-                  size="xs"
-                  variant="subtle"
-                  aria-label={`${t.tickets.moveDown}: ${v.name}`}
-                  disabled={idx === items.length - 1}
-                  onClick={() => reorder(idx, idx + 1)}
-                >
-                  ↓
-                </ActionIcon>
-                <ActionIcon
-                  size="xs"
-                  variant="subtle"
-                  color="red"
-                  aria-label={`${t.tickets.unpin}: ${v.name}`}
-                  onClick={() => saveSidebar.mutate(items.filter((x) => x.viewId !== i.viewId))}
-                >
-                  ✕
-                </ActionIcon>
-              </Group>
-            );
-          })}
+          <MyViewsList
+            items={items}
+            views={viewsById}
+            ownViewIds={new Set(sb.myViews.map((v) => v.id))}
+            activeId={viewId ?? null}
+            saving={saveSidebar.isPending}
+            onOpen={(id) => setParams({ view: id })}
+            onSaveOrder={(next) => saveSidebar.mutateAsync(next)}
+            onDelete={async (item) => {
+              if (sb.myViews.some((v) => v.id === item.viewId)) {
+                await api('DELETE', `/tickets/views/${item.viewId}`).catch((err) => {
+                  notifyError(err);
+                  throw err;
+                });
+                await qc.invalidateQueries({ queryKey: ['ticket-sidebar'] });
+                if (viewId === item.viewId) setParams({});
+              } else await saveSidebar.mutateAsync(items.filter((x) => x.viewId !== item.viewId));
+            }}
+          />
           {meta.data.can.createViews && (
             <Button size="compact-xs" variant="subtle" onClick={() => setNewView({ name: '', conditions: [] })}>
               {t.tickets.addView}
@@ -257,6 +244,7 @@ export function TicketsPage() {
       <Grid.Col span={{ base: 12, md: 9, lg: 10 }}>
         <EntityList<Ticket>
           exportEntity="tickets"
+          rowBold={(r) => !!r.unread}
           list="tickets"
           title={current?.name ?? t.tickets.title}
           endpoint="/tickets"

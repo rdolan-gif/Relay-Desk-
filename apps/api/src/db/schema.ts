@@ -1118,3 +1118,18 @@ export const rightsProfileKbFolders = pgTable(
   },
   (t) => [primaryKey({ columns: [t.rightsProfileId, t.folderId] })],
 );
+
+/** When each person last opened each ticket: Open tickets with newer activity show as unread. */
+export const ticketReads = pgTable(
+  'ticket_reads',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    readAt: timestamp('read_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.ticketId] })],
+);

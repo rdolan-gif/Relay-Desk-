@@ -9,6 +9,9 @@
 | Per-person signature, default "Kind regards, <name>"                                                                        | `packages/domain/src/users/user-rules.test.ts`, `apps/api/test/auth.test.ts`           |
 | Company › Branch › Branch number with phones, emails and addresses; branch card on tickets; branch and company ticket lists | `packages/domain/src/crm/accounts.test.ts`, `apps/api/test/branches.test.ts`           |
 | Support team structure (categories, rights, views)                                                                          | `pnpm db:setup:support` (add `-- --demo` for demo users and data)                      |
+| Main menu Ricoman blue in light mode (O-17)                                                                                 | `e2e/tests/owner-requests.spec.ts`                                                     |
+| Open, unread tickets bold until opened; bold again after new activity (O-18)                                                | `apps/api/test/owner-requests.test.ts`, `e2e/tests/owner-requests.spec.ts`             |
+| My views: drag to reorder asks to save; swipe left reveals a bin that asks before deleting (O-19)                           | `e2e/tests/owner-requests.spec.ts`                                                     |
 
 ## Phase 7 — Reporting and knowledge base ✅ (portal deferred, owner S-8)
 
