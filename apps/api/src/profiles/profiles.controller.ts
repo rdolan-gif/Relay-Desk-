@@ -51,6 +51,22 @@ const rightsSchema = z.object({
   ticketViews: z.union([z.literal('all'), idList]).default([]),
   mailboxes: z.union([z.literal('all'), idList]).default([]),
   macros: z.union([z.literal('all'), idList]).default([]),
+  kbFolders: z
+    .union([
+      z.literal('all'),
+      z
+        .array(
+          z.object({
+            folderId: z.string().uuid(),
+            view: z.boolean().default(true),
+            create: z.boolean().default(false),
+            update: z.boolean().default(false),
+            delete: z.boolean().default(false),
+          }),
+        )
+        .max(1000),
+    ])
+    .default([]),
 });
 
 @ApiTags('settings')

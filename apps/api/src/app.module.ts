@@ -81,6 +81,10 @@ import { MergeService } from './data/merge.service';
 import { GdprService } from './gdpr/gdpr.service';
 import { JobsController } from './jobs/jobs.controller';
 import { JobsService } from './jobs/jobs.service';
+import { KbController } from './kb/kb.controller';
+import { KbService } from './kb/kb.service';
+import { ReportsController } from './reports/reports.controller';
+import { ReportsService } from './reports/reports.service';
 
 class PoolCloser implements OnApplicationShutdown {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
@@ -137,8 +141,12 @@ export class AppModule {
         TicketMacrosController,
         JobsController,
         DataController,
+        ReportsController,
+        KbController,
       ],
       providers: [
+        ReportsService,
+        KbService,
         JobsService,
         GdprService,
         DataService,

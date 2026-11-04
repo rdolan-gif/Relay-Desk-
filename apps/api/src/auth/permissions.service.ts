@@ -8,6 +8,7 @@ import {
   rightsProfileTicketViews,
   rightsProfileMailboxes,
   rightsProfileMacros,
+  rightsProfileKbFolders,
   rightsProfileCrmDatabases,
   rightsProfileCrmRecordTypes,
   rightsProfileEditableAccessProfiles,
@@ -19,7 +20,7 @@ import {
 
 export type UserRow = typeof users.$inferSelect;
 
-export const NO_TICKET_RIGHTS: TicketRights = { categories: [], ticketViews: [], mailboxes: [], macros: [] };
+export const NO_TICKET_RIGHTS: TicketRights = { categories: [], ticketViews: [], mailboxes: [], macros: [], kb: [] };
 
 const NO_RIGHTS: RightsProfile = {
   userVisibility: 'selected',
@@ -113,7 +114,12 @@ export class PermissionsService {
             .from(rightsProfileMacros)
             .where(eq(rightsProfileMacros.rightsProfileId, rp.id))
         ).map((m) => m.id);
-    return { categories: cats, ticketViews: views, mailboxes, macros: macroIds };
+    const kb = rp.allKbFolders
+      ? 'all'
+      : (await tx.select().from(rightsProfileKbFolders).where(eq(rightsProfileKbFolders.rightsProfileId, rp.id))).map(
+          ({ folderId, view, create, update, delete: del }) => ({ folderId, view, create, update, delete: del }),
+        );
+    return { categories: cats, ticketViews: views, mailboxes, macros: macroIds, kb };
   }
 
   async loadRights(rightsProfileId: string, tx: DbOrTx = this.db): Promise<RightsProfile | null> {

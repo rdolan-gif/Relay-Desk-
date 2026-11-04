@@ -1,3 +1,4 @@
+import type { KbRights } from '../kb/rights.js';
 /** Category rights: Access (can see tickets) and Distribution limit (spec 4, 9). */
 export interface CategoryRight {
   categoryId: string;
@@ -17,6 +18,8 @@ export interface TicketRights {
   mailboxes: 'all' | readonly string[];
   /** Macros the user may run (spec 10, "Availability"). */
   macros: 'all' | readonly string[];
+  /** Knowledge-base folder rights (spec 15). */
+  kb: KbRights;
 }
 
 export function canUseMacro(rights: TicketRights, macroId: string): boolean {

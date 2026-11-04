@@ -7,6 +7,7 @@ import {
   DEFAULT_SEED_PASSWORD,
   enquiryTypeField,
   seed,
+  seedKb,
   seedMacro,
   seedRoutingRules,
   seedSla,
@@ -23,6 +24,7 @@ import {
   crmDatabases,
   rightsProfileCategories,
   rightsProfileMailboxes,
+  rightsProfileKbFolders,
   mailboxQueues,
   mailboxQueueCrmDatabases,
   rightsProfileCrmDatabases,
@@ -250,6 +252,27 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   }
   // Enquiry type from the subject/body (owner O-11). No automatic filtering (owner O-12).
   await seedRoutingRules(db, { enquiryType, includeNoReply: false });
+  // Starter knowledge-base folders (spec 15): the team can read and write in all three.
+  const kbIds = await seedKb(db, {
+    Products: [],
+    Processes: [],
+    'Customer FAQs': [],
+  });
+  for (const profileId of Object.values(rp))
+    for (const folderId of Object.values(kbIds))
+      await db
+        .insert(rightsProfileKbFolders)
+        .values({ rightsProfileId: profileId, folderId, view: true, create: true, update: true })
+        .onConflictDoNothing();
+  // The Agent access profile may write articles (folder rights still decide where).
+  const [agentProfile] = await db.select().from(accessProfiles).where(eq(accessProfiles.name, 'Agent'));
+  if (agentProfile) {
+    const modules = {
+      ...agentProfile.modules,
+      knowledge_base: { enabled: true, create: true, read: true, update: true, delete: false },
+    };
+    await db.update(accessProfiles).set({ modules }).where(eq(accessProfiles.id, agentProfile.id));
+  }
   // A starter macro (spec 10); admins can change or add more in Settings › Macros.
   await seedMacro(
     db,

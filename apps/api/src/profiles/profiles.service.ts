@@ -23,6 +23,7 @@ import {
   rightsProfileTicketViews,
   rightsProfileMailboxes,
   rightsProfileMacros,
+  rightsProfileKbFolders,
   rightsProfileCrmDatabases,
   rightsProfileCrmRecordTypes,
   rightsProfileEditableAccessProfiles,
@@ -53,6 +54,7 @@ export interface RightsProfileInput {
   ticketViews: 'all' | string[];
   mailboxes: 'all' | string[];
   macros: 'all' | string[];
+  kbFolders: 'all' | { folderId: string; view: boolean; create: boolean; update: boolean; delete: boolean }[];
 }
 
 const forbidden = (message: string, reason: string) => new ForbiddenException({ message, reason });
@@ -216,6 +218,7 @@ export class ProfilesService {
             allTicketViews: input.ticketViews === 'all',
             allMailboxes: input.mailboxes === 'all',
             allMacros: input.macros === 'all',
+            allKbFolders: input.kbFolders === 'all',
           })
           .returning();
         await this.writeRightsLinks(tx, row!.id, input);
@@ -256,6 +259,7 @@ export class ProfilesService {
             allTicketViews: input.ticketViews === 'all',
             allMailboxes: input.mailboxes === 'all',
             allMacros: input.macros === 'all',
+            allKbFolders: input.kbFolders === 'all',
             updatedAt: new Date(),
           })
           .where(eq(rightsProfiles.id, id))
@@ -344,6 +348,11 @@ export class ProfilesService {
     checkScope('team views', auth.ticketRights.ticketViews, input.ticketViews);
     checkScope('mailboxes', auth.ticketRights.mailboxes, input.mailboxes);
     checkScope('macros', auth.ticketRights.macros, input.macros);
+    checkScope(
+      'knowledge-base folders',
+      auth.ticketRights.kb === 'all' ? 'all' : auth.ticketRights.kb.map((g) => g.folderId),
+      input.kbFolders === 'all' ? 'all' : input.kbFolders.map((g) => g.folderId),
+    );
     await this.assertExist(
       categories,
       input.categories === 'all' ? 'all' : input.categories.map((c) => c.categoryId),
@@ -393,6 +402,17 @@ export class ProfilesService {
       await tx.delete(rightsProfileTicketViews).where(eq(rightsProfileTicketViews.rightsProfileId, id));
       await tx.delete(rightsProfileMailboxes).where(eq(rightsProfileMailboxes.rightsProfileId, id));
       await tx.delete(rightsProfileMacros).where(eq(rightsProfileMacros.rightsProfileId, id));
+      await tx.delete(rightsProfileKbFolders).where(eq(rightsProfileKbFolders.rightsProfileId, id));
+    }
+    if (input.kbFolders !== 'all' && input.kbFolders.length) {
+      const seen = new Set<string>();
+      await tx
+        .insert(rightsProfileKbFolders)
+        .values(
+          input.kbFolders
+            .filter((g) => !seen.has(g.folderId) && seen.add(g.folderId))
+            .map((g) => ({ rightsProfileId: id, ...g })),
+        );
     }
     if (input.macros !== 'all' && input.macros.length) {
       await tx
@@ -470,6 +490,7 @@ export class ProfilesService {
       ticketViews: tickets.ticketViews === 'all' ? 'all' : [...tickets.ticketViews].sort(),
       mailboxes: tickets.mailboxes === 'all' ? 'all' : [...tickets.mailboxes].sort(),
       macros: tickets.macros === 'all' ? 'all' : [...tickets.macros].sort(),
+      kbFolders: tickets.kb === 'all' ? 'all' : [...tickets.kb].sort((a, b) => a.folderId.localeCompare(b.folderId)),
     };
   }
 }

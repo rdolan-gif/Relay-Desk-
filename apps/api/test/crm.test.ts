@@ -434,6 +434,7 @@ describe('CRM (spec 7, 12, 14, 17)', () => {
         contacts: [],
         accounts: [],
         records: [],
+        kb: [],
       });
       expect((await admin.get('/api/search?q=sam')).body.contacts.length).toBe(1);
     });

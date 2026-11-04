@@ -80,6 +80,8 @@ export const rightsProfiles = pgTable(
     allTicketViews: boolean('all_ticket_views').notNull().default(false),
     allMailboxes: boolean('all_mailboxes').notNull().default(false),
     allMacros: boolean('all_macros').notNull().default(false),
+    /** Every knowledge-base folder with full rights (spec 15). */
+    allKbFolders: boolean('all_kb_folders').notNull().default(false),
     ...timestamps,
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -830,7 +832,7 @@ export const attachments = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     /** 'activity' once attached; 'upload' while waiting to be sent with an email. */
-    ownerType: text('owner_type').$type<'activity' | 'upload'>().notNull(),
+    ownerType: text('owner_type').$type<'activity' | 'upload' | 'kb_article'>().notNull(),
     ownerId: text('owner_id').notNull(),
     filename: text('filename').notNull(),
     mime: text('mime').notNull(),
@@ -1038,3 +1040,81 @@ export const importTemplates = pgTable('import_templates', {
   createdById: uuid('created_by_id').references(() => users.id),
   ...timestamps,
 });
+
+/** Knowledge base (spec 15): a nested folder tree. */
+export const kbFolders = pgTable('kb_folders', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  parentId: uuid('parent_id'),
+  title: text('title').notNull(),
+  position: integer('position').notNull().default(0),
+  ...timestamps,
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+});
+
+export const kbArticles = pgTable(
+  'kb_articles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    folderId: uuid('folder_id')
+      .notNull()
+      .references(() => kbFolders.id),
+    title: text('title').notNull(),
+    bodyHtml: text('body_html').notNull().default(''),
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    version: integer('version').notNull().default(1),
+    authorId: uuid('author_id').references(() => users.id),
+    updatedById: uuid('updated_by_id').references(() => users.id),
+    /** The ticket activity it was written from, if any. */
+    sourceActivityId: uuid('source_activity_id'),
+    ...timestamps,
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    searchVector: tsvector('search_vector').generatedAlwaysAs(
+      sql`to_tsvector('simple', coalesce(title, '') || ' ' || regexp_replace(coalesce(body_html, ''), '<[^>]+>', ' ', 'g'))`,
+    ),
+  },
+  (t) => [
+    index('kb_articles_folder_idx').on(t.folderId),
+    index('kb_articles_search_gin').using('gin', t.searchVector),
+    index('kb_articles_tags_gin').using('gin', t.tags),
+  ],
+);
+
+/** Every saved version, for history and restore (spec 15). */
+export const kbArticleVersions = pgTable(
+  'kb_article_versions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    articleId: uuid('article_id')
+      .notNull()
+      .references(() => kbArticles.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    title: text('title').notNull(),
+    bodyHtml: text('body_html').notNull(),
+    tags: text('tags').array().notNull(),
+    folderId: uuid('folder_id').notNull(),
+    editedById: uuid('edited_by_id').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('kb_article_versions_uq').on(t.articleId, t.version)],
+);
+
+/** Folder rights per rights profile (spec 15). */
+export const rightsProfileKbFolders = pgTable(
+  'rights_profile_kb_folders',
+  {
+    rightsProfileId: uuid('rights_profile_id')
+      .notNull()
+      .references(() => rightsProfiles.id, { onDelete: 'cascade' }),
+    folderId: uuid('folder_id')
+      .notNull()
+      .references(() => kbFolders.id, { onDelete: 'cascade' }),
+    view: boolean('view').notNull().default(true),
+    create: boolean('create').notNull().default(false),
+    update: boolean('update').notNull().default(false),
+    delete: boolean('delete').notNull().default(false),
+  },
+  (t) => [primaryKey({ columns: [t.rightsProfileId, t.folderId] })],
+);

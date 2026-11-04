@@ -32,3 +32,5 @@ export * from './data/csv.js';
 export * from './data/imports.js';
 export * from './data/gdpr.js';
 export * from './data/merge.js';
+export * from './reports/metrics.js';
+export * from './kb/rights.js';

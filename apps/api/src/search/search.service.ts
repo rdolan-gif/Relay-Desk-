@@ -8,6 +8,7 @@ import { ContactsService } from '../crm/contacts.service';
 import { RecordsService } from '../crm/records.service';
 import { DB, type Db } from '../db/db';
 import { accounts, contacts, crmRecords, tickets } from '../db/schema';
+import { KbService } from '../kb/kb.service';
 import { TicketsService } from '../tickets/tickets.service';
 
 export const SEARCH_MIN_LENGTH = 3;
@@ -26,13 +27,14 @@ export class SearchService {
     @Inject(AccountsService) private readonly accountsService: AccountsService,
     @Inject(RecordsService) private readonly recordsService: RecordsService,
     @Inject(TicketsService) private readonly ticketsService: TicketsService,
+    @Inject(KbService) private readonly kb: KbService,
   ) {}
 
   async search(auth: AuthContext, q: string) {
     const term = q.trim();
-    const empty = { tickets: [], contacts: [], accounts: [], records: [] };
+    const empty = { tickets: [], contacts: [], accounts: [], records: [], kb: [] };
     if (term.length < SEARCH_MIN_LENGTH) return empty;
-    const can = (m: 'tickets' | 'crm_contacts' | 'crm_accounts' | 'crm_records') =>
+    const can = (m: 'tickets' | 'crm_contacts' | 'crm_accounts' | 'crm_records' | 'knowledge_base') =>
       checkModuleAccess(auth.principal, m, 'read').allowed;
 
     const contactRows = can('crm_contacts')
@@ -91,6 +93,9 @@ export class SearchService {
           .orderBy(desc(tickets.id))
           .limit(PER_TYPE)
       : [];
-    return { tickets: ticketRows, contacts: contactRows, accounts: accountRows, records: recordRows };
+    const kbRows = can('knowledge_base')
+      ? (await this.kb.list(auth, { q: term, limit: PER_TYPE })).map((a) => ({ id: a.id, title: a.title }))
+      : [];
+    return { tickets: ticketRows, contacts: contactRows, accounts: accountRows, records: recordRows, kb: kbRows };
   }
 }

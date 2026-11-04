@@ -38,6 +38,10 @@ import {
   timeGroups,
   macroCategories,
   macros,
+  kbArticleVersions,
+  kbArticles,
+  kbFolders,
+  rightsProfileKbFolders,
 } from './schema';
 import type { FieldOption, FieldType, FormLayout } from '@relay-desk/domain';
 
@@ -108,6 +112,7 @@ export async function seed(db: Db, password = process.env.SEED_PASSWORD ?? DEFAU
       allTicketViews: true,
       allMailboxes: true,
       allMacros: true,
+      allKbFolders: true,
     },
     'Standard agent': {
       userVisibility: 'all' as const,
@@ -499,6 +504,36 @@ async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<
     .values({ rightsProfileId: standardAgentRightsId, queueId: mailbox!.id })
     .onConflictDoNothing();
   await seedRoutingRules(db, { doNotReply, enquiryType, includeNoReply: true });
+  const kbFolderIds = await seedKb(db, {
+    'How we work': [
+      {
+        title: 'Returns: how to process a return',
+        tags: ['returns', 'process'],
+        bodyHtml:
+          '<h3>Before you start</h3><p>Check the order is within 30 days and ask for photos of any damage.</p><ol><li>Raise an RMA number.</li><li>Send the customer the returns label.</li><li>Put the ticket in Waiting with a re-open date.</li></ol>',
+      },
+    ],
+    Products: [
+      {
+        title: 'LED panels: common questions',
+        tags: ['led', 'panels', 'faq'],
+        bodyHtml: '<p>Our 600×600 LED panels come in 3000K, 4000K and 6500K. Lead time is usually 3 working days.</p>',
+      },
+    ],
+  });
+  // Agents see both demo folders (spec 15 folder rights); a restricted folder tests hiding.
+  const restricted = (
+    await seedKb(db, {
+      'Management only': [
+        { title: 'Pricing margins 2026', tags: ['pricing'], bodyHtml: '<p>Confidential margin targets.</p>' },
+      ],
+    })
+  )['Management only']!;
+  for (const folderId of Object.values(kbFolderIds))
+    await db
+      .insert(rightsProfileKbFolders)
+      .values({ rightsProfileId: standardAgentRightsId, folderId, view: true })
+      .onConflictDoNothing();
   const waitingMacro = await seedMacro(
     db,
     'Waiting +2 days',
@@ -518,7 +553,46 @@ async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<
     officeHours,
     standardSla,
     waitingMacro,
+    kbFolders: { Products: kbFolderIds.Products!, 'How we work': kbFolderIds['How we work']!, restricted },
   };
+}
+
+/** Knowledge-base folders and articles, created once by title (spec 15). */
+export async function seedKb(
+  db: Db,
+  content: Record<string, { title: string; tags: string[]; bodyHtml: string }[]>,
+): Promise<Record<string, string>> {
+  const ids: Record<string, string> = {};
+  const [admin] = await db.select().from(users).where(eq(users.type, 'administrator')).limit(1);
+  for (const [folderTitle, articles] of Object.entries(content)) {
+    let [folder] = await db
+      .select()
+      .from(kbFolders)
+      .where(and(eq(kbFolders.title, folderTitle), isNull(kbFolders.parentId), isNull(kbFolders.deletedAt)));
+    folder ??= (await db.insert(kbFolders).values({ title: folderTitle }).returning())[0]!;
+    ids[folderTitle] = folder.id;
+    for (const a of articles) {
+      const [exists] = await db
+        .select({ id: kbArticles.id })
+        .from(kbArticles)
+        .where(and(eq(kbArticles.title, a.title), isNull(kbArticles.deletedAt)));
+      if (exists) continue;
+      const [row] = await db
+        .insert(kbArticles)
+        .values({ ...a, folderId: folder.id, authorId: admin?.id ?? null, updatedById: admin?.id ?? null })
+        .returning();
+      await db.insert(kbArticleVersions).values({
+        articleId: row!.id,
+        version: 1,
+        title: row!.title,
+        bodyHtml: row!.bodyHtml,
+        tags: row!.tags,
+        folderId: row!.folderId,
+        editedById: admin?.id ?? null,
+      });
+    }
+  }
+  return ids;
 }
 
 /** Creates a macro once (by title) for these categories (spec 10). */
