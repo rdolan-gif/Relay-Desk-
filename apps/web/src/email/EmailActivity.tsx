@@ -1,5 +1,6 @@
 import { Anchor, Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import { useEffect, useRef, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { formatDateTime } from '../format';
 import { t } from '../i18n/en-GB';
@@ -21,7 +22,7 @@ export function EmailActivity({
   onCompose: (mode: ComposeMode, source: Activity) => void;
   actions?: React.ReactNode;
 }) {
-  const { me } = useAuth();
+  const { me, can } = useAuth();
   const e = a.email!;
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(120);
@@ -135,6 +136,16 @@ export function EmailActivity({
           <Button size="compact-xs" variant="light" onClick={() => onCompose('forward', a)}>
             {t.email.forward}
           </Button>
+          {can('knowledge_base', 'create') && (
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              component={RouterLink}
+              to={`/kb/articles/new?fromActivity=${a.id}`}
+            >
+              {t.kb.createArticle}
+            </Button>
+          )}
         </Group>
       </Stack>
     </Paper>

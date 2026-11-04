@@ -85,16 +85,14 @@ describe('Phase 7 acceptance', () => {
         [london(10, 15, 10), 'waiting'],
       ]);
       const t4 = await mk({ createdAt: london(10, 9, 10), state: 'open' }, []);
-      await db
-        .insert(activities)
-        .values({
-          ticketId: t1,
-          type: 'email',
-          channel: 'email',
-          direction: 'in',
-          status: 'received',
-          createdAt: london(10, 12, 10),
-        });
+      await db.insert(activities).values({
+        ticketId: t1,
+        type: 'email',
+        channel: 'email',
+        direction: 'in',
+        status: 'received',
+        createdAt: london(10, 12, 10),
+      });
       return { t1, t2, t3, t4, support, agentId: ag!.id };
     };
     const range = (extra = '') =>

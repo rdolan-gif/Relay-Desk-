@@ -81,6 +81,18 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 | Q-P2-15 | Date-time inputs              | Use the browser's own picker, which follows the computer's regional settings (DD/MM/YYYY on UK-configured machines).                       | Assumed  |
 | Q-P2-16 | "Sessions view" in History    | Comes with time tracking (spec 6.5, [SHOULD]); "Hide activities" is built.                                                                 | Assumed  |
 
+## Phase 7 decisions
+
+| #      | Topic                   | Decision                                                                                                                                                                   | Status   |
+| ------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Q-P7-1 | Phase 7 done-when       | The portal is deferred (S-8), so Phase 7 is done when report figures match a hand-worked data set and the KB can be used from the reply editor with folder rights applied. | Assumed  |
+| Q-P7-2 | Who sees reports        | The Reporting module (access profiles). Only Administrators have it by default, e.g. Richard. Figures only count tickets in categories the person can see.                 | **Open** |
+| Q-P7-3 | Median time to close    | Working time from creation to the first close, minus the working time spent in Waiting.                                                                                    | Assumed  |
+| Q-P7-4 | Closed count            | Tickets closed (or archived) at least once in the period; a ticket reopened later still counts as closed in that period and as reopened.                                   | Assumed  |
+| Q-P7-5 | KB rights on upgrade    | Existing rights profiles get every folder (the KB is new); new profiles start with none. Top-level folders can only be added by people with every folder.                  | Assumed  |
+| Q-P7-6 | KB in emails            | "Insert text" leaves out images (they live inside Relay Desk); "Insert link" links to the article in Relay Desk, so it is for colleagues, not customers.                   | Assumed  |
+| Q-P7-7 | Agents writing articles | The Ricoman setup lets agents create and edit articles in Products, Processes and Customer FAQs; deleting needs an administrator.                                          | Assumed  |
+
 ## Phase 6 decisions
 
 | #      | Topic             | Decision                                                                                                                                                                                                                                | Status  |

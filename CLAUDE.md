@@ -17,7 +17,8 @@ Progress and the test for each acceptance criterion: `docs/progress.md`.
 - Phase 4 (SLA and distribution; reply targets by enquiry type): **done**
 - Phase 5 (notifications, presence, macros): **done**
 - Phase 6 (search, bulk, import/export, merge, GDPR): **done**
-- Next: Phase 7 (reporting and knowledge base; no customer portal for now, owner answer)
+- Phase 7 (reporting and knowledge base; portal deferred, owner S-8): **done**
+- Next: Phase 8 (QOL and hardening) — **on hold until the owner sends the QOL list**
 
 ## Stack
 
@@ -105,6 +106,8 @@ Integration tests drop and recreate the schema of `TEST_DATABASE_URL`
 - **Jobs**: long work goes through `JobsService.start(auth, kind, title, payload, handler)`; tests
   call `settle()`. **GDPR**: anything that stores personal data must be scrubbed by
   `GdprService.scrubTicket/scrubActivities` (and its files deleted) — extend them with new tables.
+- **Knowledge base**: folder rights live in `auth.ticketRights.kb` (`kbFolderRights`, nearest grant
+  wins); article HTML goes through `sanitizeArticle` (images only from `/api/kb/files/<id>`).
 - **Owner O-15**: the system never closes tickets on its own (no auto-close in rules or email).
 - **Filters**: validate with domain `validateConditions`, translate with `filterSql`; keep
   `matchesConditions` (domain) and `conditionToSql` (API) in agreement.

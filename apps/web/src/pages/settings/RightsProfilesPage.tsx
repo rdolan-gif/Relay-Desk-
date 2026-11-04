@@ -11,6 +11,7 @@ import {
   Textarea,
   Title,
 } from '@mantine/core';
+import { KbRightsEditor } from './KbRightsEditor';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api';
@@ -35,6 +36,7 @@ const EMPTY: Draft = {
   ticketViews: [],
   mailboxes: [],
   macros: [],
+  kbFolders: [],
 };
 
 function AllOrList(props: {
@@ -196,6 +198,7 @@ export function RightsProfilesPage() {
               options={(mailboxes.data ?? []).map((m) => ({ value: m.id, label: `${m.title} (${m.address})` }))}
               onChange={(v) => setDraft({ ...draft, mailboxes: v })}
             />
+            <KbRightsEditor value={draft.kbFolders} onChange={(kbFolders) => setDraft({ ...draft, kbFolders })} />
             <AllOrList
               label={t.macros.rights}
               value={draft.macros}

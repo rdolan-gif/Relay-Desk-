@@ -25,7 +25,7 @@ import {
 import { ConfirmTyped } from '../../components/ConfirmTyped';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { formatPhoneForDisplay, type Priority, type TicketState } from '@relay-desk/domain';
 import { ApiError, api } from '../../api';
 import { useAuth } from '../../auth';
@@ -1072,7 +1072,8 @@ function ActivityItem(props: {
   onChild: () => void;
   onMove: () => void;
 }) {
-  const { me } = useAuth();
+  const { me, can } = useAuth();
+  const canCreateArticle = can('knowledge_base', 'create');
   const { a } = props;
   const [editing, setEditing] = useState(false);
   const [body, setBody] = useState(a.bodyHtml);
@@ -1123,6 +1124,11 @@ function ActivityItem(props: {
                 {t.tickets.copyLink}
               </Menu.Item>
               <Menu.Item onClick={props.onChild}>{t.tickets.createChild}</Menu.Item>
+              {canCreateArticle && (
+                <Menu.Item component={RouterLink} to={`/kb/articles/new?fromActivity=${a.id}`}>
+                  {t.kb.createArticle}
+                </Menu.Item>
+              )}
               {props.canMove && <Menu.Item onClick={props.onMove}>{t.tickets.moveActivity}</Menu.Item>}
               <Menu.Item onClick={() => window.print()}>Print</Menu.Item>
             </Menu.Dropdown>

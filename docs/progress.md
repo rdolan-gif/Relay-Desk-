@@ -10,6 +10,47 @@
 | Company › Branch › Branch number with phones, emails and addresses; branch card on tickets; branch and company ticket lists | `packages/domain/src/crm/accounts.test.ts`, `apps/api/test/branches.test.ts`           |
 | Support team structure (categories, rights, views)                                                                          | `pnpm db:setup:support` (add `-- --demo` for demo users and data)                      |
 
+## Phase 7 — Reporting and knowledge base ✅ (portal deferred, owner S-8)
+
+Scope (spec 20): metrics in 17, knowledge base, external portal. The portal is not needed yet,
+so its done-when ("an external user sees only external comments…") is replaced by:
+
+**Done when (replacement, Q-P7-1):** reporting figures match a hand-worked set of tickets, and an
+agent finds a knowledge-base article from the reply editor and inserts it, while folder rights
+hide restricted articles.
+
+| Criterion / rule                                                                                                                                        | Test                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **Created/closed, backlog, SLA met %, median first reply and time to close (working time), reopen rate, workload and heatmap match a hand-worked week** | `apps/api/test/phase7-acceptance.test.ts`, `packages/domain/src/reports.test.ts` |
+| Every figure drills down to its tickets; sections export as CSV/XLSX; Reporting module required                                                         | `phase7-acceptance.test.ts`, `e2e/tests/phase7.spec.ts`                          |
+| Email activity listing across tickets, filterable                                                                                                       | `phase7-acceptance.test.ts`                                                      |
+| **KB article found and inserted from the reply editor; restricted articles not offered**                                                                | `e2e/tests/phase7.spec.ts`, `phase7-acceptance.test.ts`                          |
+| Folder rights view/create/update/delete, inherited by subfolders; hidden from lists, pages and global search                                            | `phase7-acceptance.test.ts`, `reports.test.ts`                                   |
+| Versions kept; restoring saves the old content as a new version                                                                                         | `phase7-acceptance.test.ts`, `e2e/tests/phase7.spec.ts`                          |
+| Search by words, folder (with subfolders) and tag; KB in global search                                                                                  | `phase7-acceptance.test.ts`                                                      |
+| "Create article" from a ticket activity pre-fills the draft                                                                                             | `phase7-acceptance.test.ts`                                                      |
+| Images only from the article's own files; files follow the article's rights                                                                             | `phase7-acceptance.test.ts`                                                      |
+
+What exists:
+
+- Domain: `reports/metrics.ts`, `kb/rights.ts`.
+- API: `/api/reports/{summary,tickets,emails,export}`; `/api/kb/folders`, `/api/kb/articles`
+  (+ versions, restore, files), `/api/kb/files/:id`, `/api/kb/tags`,
+  `/api/kb/drafts/from-activity/:id`; KB folder rights on rights profiles; KB in global search.
+- Web: Reporting (filters, headline figures, created/closed and backlog charts with table view,
+  workload, heatmap, drill-down, exports, email activity tab); Knowledge base (folder tree,
+  tags, search, article view/edit with images and files, version history); KB panel in the
+  email composer (insert text without images, or a link); "Create article" on activities;
+  KB folder rights on rights profiles.
+- Seed: demo folders (one restricted); `pnpm db:setup:support` adds Products, Processes and
+  Customer FAQs, writable by the team.
+
+Deferred, deliberately:
+
+- External portal (owner S-8) and public help centre ([LATER]).
+- "Time spent" in workload needs time tracking (spec 6.5 [SHOULD]); scheduled email reports,
+  custom report builder and wallboards are [LATER].
+
 ## Phase 6 — Search, bulk, GDPR ✅
 
 Scope (spec 20): global search, bulk edit/delete as jobs, import/export with mapping

@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
+import { KbPanel } from '../kb/KbPanel';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { replyRecipients, replySubject, signatureHtml } from '@relay-desk/domain';
@@ -182,6 +183,14 @@ export function EmailComposer({
             value={null}
             onChange={insertTemplate}
             searchable
+          />
+        </Group>
+        <Group gap="xs">
+          <KbPanel
+            onInsert={(html) => {
+              setBody(`${html}${body}`);
+              setEditorKey((k) => k + 1);
+            }}
           />
         </Group>
         <TagsInput label={t.email.to} value={to} onChange={setTo} splitChars={[',', ' ', ';']} clearable />

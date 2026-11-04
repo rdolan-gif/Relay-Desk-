@@ -11,6 +11,9 @@ import {
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
+import { ReportsPage } from './pages/reports/ReportsPage';
+import { KbPage } from './pages/kb/KbPage';
+import { KbArticlePage } from './pages/kb/KbArticlePage';
 import { JobsPage } from './pages/JobsPage';
 import { ImportPage } from './pages/crm/ImportPage';
 import { DeletedItemsPage } from './pages/settings/DeletedItemsPage';
@@ -158,6 +161,17 @@ function Shell() {
             active={location.pathname === '/templates'}
           />
         )}
+        {can('knowledge_base', 'read') && (
+          <NavLink component={RouterLink} to="/kb" label={t.nav.kb} active={location.pathname.startsWith('/kb')} />
+        )}
+        {can('reporting', 'read') && (
+          <NavLink
+            component={RouterLink}
+            to="/reports"
+            label={t.nav.reporting}
+            active={location.pathname === '/reports'}
+          />
+        )}
         {crmLinks.length > 0 && (
           <NavLink label={t.nav.crm} defaultOpened>
             {crmLinks.map((l) => (
@@ -212,6 +226,10 @@ function Shell() {
           <Route path="/settings/deleted" element={<DeletedItemsPage />} />
           <Route path="/crm/import/:entity" element={<ImportPage />} />
           <Route path="/jobs" element={<JobsPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/kb" element={<KbPage />} />
+          <Route path="/kb/articles/:id" element={<KbArticlePage />} />
+          <Route path="/kb/articles/:id/:mode" element={<KbArticlePage />} />
           <Route path="/settings/crm-databases" element={<CrmDatabasesPage />} />
           <Route path="/settings/crm-record-types" element={<RecordTypesPage />} />
           <Route path="/crm/contacts" element={<ContactsPage />} />

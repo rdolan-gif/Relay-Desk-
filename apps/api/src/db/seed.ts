@@ -529,6 +529,8 @@ async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<
       ],
     })
   )['Management only']!;
+  // Demo agents get named folders only, so the restricted folder stays hidden (also after upgrades).
+  await db.update(rightsProfiles).set({ allKbFolders: false }).where(eq(rightsProfiles.id, standardAgentRightsId));
   for (const folderId of Object.values(kbFolderIds))
     await db
       .insert(rightsProfileKbFolders)

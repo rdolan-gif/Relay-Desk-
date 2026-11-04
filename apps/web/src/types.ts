@@ -51,6 +51,7 @@ export interface RightsProfileDto {
   ticketViews: 'all' | string[];
   mailboxes: 'all' | string[];
   macros: 'all' | string[];
+  kbFolders: 'all' | { folderId: string; view: boolean; create: boolean; update: boolean; delete: boolean }[];
 }
 
 export interface AuditEntry {

@@ -11,6 +11,7 @@ interface Results {
   contacts: { id: string; name: string; emails: string[] }[];
   accounts: { id: string; name: string }[];
   records: { id: string; title: string }[];
+  kb?: { id: string; title: string }[];
 }
 
 /**
@@ -51,6 +52,10 @@ export function GlobalSearch() {
         label: r.title,
         hint: undefined,
       })),
+    },
+    {
+      label: t.kb.title,
+      items: (results.data?.kb ?? []).map((a) => ({ value: `/kb/articles/${a.id}`, label: a.title, hint: undefined })),
     },
   ].filter((g) => g.items.length);
 

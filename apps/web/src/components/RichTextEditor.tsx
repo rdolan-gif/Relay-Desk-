@@ -1,6 +1,7 @@
 import { RichTextEditor as Mantine, Link } from '@mantine/tiptap';
 import '@mantine/tiptap/styles.css';
 import { useEditor } from '@tiptap/react';
+import Image from '@tiptap/extension-image';
 import StarterKit from '@tiptap/starter-kit';
 import { useEffect, useRef } from 'react';
 
@@ -9,16 +10,18 @@ interface Props {
   onChange: (html: string) => void;
   label: string;
   minHeight?: number;
+  /** Allow <img> (knowledge-base articles); the API only keeps the article's own files. */
+  images?: boolean;
 }
 
 /** Rich text with bold/italic/lists/quotes/code blocks/links (spec 6.2). Output is sanitised by the API. */
-export function RichTextEditor({ value, onChange, label, minHeight = 100 }: Props) {
+export function RichTextEditor({ value, onChange, label, minHeight = 100, images = false }: Props) {
   // Keep the latest callback without recreating the editor on every render.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const editor = useEditor(
     {
-      extensions: [StarterKit, Link.configure({ openOnClick: false })],
+      extensions: [StarterKit, Link.configure({ openOnClick: false }), ...(images ? [Image] : [])],
       content: value,
       shouldRerenderOnTransaction: false,
       onUpdate: ({ editor: e }) => onChangeRef.current(e.isEmpty ? '' : e.getHTML()),
