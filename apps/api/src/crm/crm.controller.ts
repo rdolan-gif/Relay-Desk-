@@ -18,7 +18,10 @@ import type { z } from 'zod';
 import { Auth, AuthenticatedOnly, RequireAccess } from '../auth/decorators';
 import { ZodPipe } from '../common/zod.pipe';
 import type { AuthContext } from '../common/request-context';
+import { ForbiddenException } from '@nestjs/common';
+import { checkModuleAccess } from '@relay-desk/domain';
 import { crmRecords } from '../db/schema';
+import { TicketsService } from '../tickets/tickets.service';
 import { AccountsService } from './accounts.service';
 import { ContactsService } from './contacts.service';
 import { filterFields, listQuerySchema, type ListQuery } from './crm-common';
@@ -41,6 +44,7 @@ import {
 } from './schemas';
 
 const listPipe = new ZodPipe(listQuerySchema);
+
 const snapPipe = new ZodPipe(snapshotQuerySchema);
 
 /** What agents need to render CRM forms and filters: visible databases/types and the field pool. */
@@ -146,6 +150,7 @@ export class AccountsController {
   constructor(
     @Inject(AccountsService) private readonly accounts: AccountsService,
     @Inject(RecordsService) private readonly records: RecordsService,
+    @Inject(TicketsService) private readonly tickets: TicketsService,
   ) {}
 
   @RequireAccess('crm_accounts', 'read')
@@ -177,6 +182,20 @@ export class AccountsController {
   @Get(':id/history')
   history(@Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.accounts.historyOf(auth, id);
+  }
+
+  /**
+   * Tickets from this account's contacts, and for a company from all its branches'
+   * contacts (owner Q2: reach a branch's enquiries from its card).
+   */
+  @RequireAccess('crm_accounts', 'read')
+  @Get(':id/tickets')
+  async ticketsOf(@Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Query(listPipe) q: ListQuery) {
+    if (!checkModuleAccess(auth.principal, 'tickets', 'read').allowed) {
+      throw new ForbiddenException({ message: 'You do not have read access to tickets.', reason: 'module_disabled' });
+    }
+    const ids = await this.accounts.familyIds(auth, id);
+    return this.tickets.listForAccounts(auth, ids, q);
   }
 
   @RequireAccess('crm_accounts', 'read')

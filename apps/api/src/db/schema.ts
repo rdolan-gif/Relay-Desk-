@@ -17,6 +17,7 @@ import {
 import type { FieldChange } from '@relay-desk/domain';
 import type {
   AccessFlagMap,
+  Address,
   FieldOption,
   FieldType,
   FilterCondition,
@@ -94,6 +95,8 @@ export const users = pgTable(
     apiTokenHash: text('api_token_hash'),
     apiTokenCreatedAt: timestamp('api_token_created_at', { withTimezone: true }),
     timezone: text('timezone').notNull().default('Europe/London'),
+    /** Email sign-off, e.g. "Kind regards,\nRyan" (owner answer Q13). Null = default. */
+    signature: text('signature'),
     ...timestamps,
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -272,11 +275,27 @@ export const accounts = pgTable(
       .notNull()
       .references(() => crmDatabases.id),
     name: text('name').notNull(),
+    /** Company › Branch (owner answer Q2): a branch points at its company. */
+    parentId: uuid('parent_id'),
+    branchCode: text('branch_code'),
+    emails: text('emails')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    phones: text('phones')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    addresses: jsonb('addresses').$type<Address[]>().notNull().default([]),
     customFields: jsonb('custom_fields').$type<Record<string, unknown>>().notNull().default({}),
     ...timestamps,
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
-  (t) => [index('accounts_database_idx').on(t.databaseId), index('accounts_name_idx').on(t.name)],
+  (t) => [
+    index('accounts_database_idx').on(t.databaseId),
+    index('accounts_name_idx').on(t.name),
+    index('accounts_parent_idx').on(t.parentId),
+  ],
 );
 
 export const contacts = pgTable(
@@ -581,4 +600,34 @@ export const sidebarItems = pgTable(
     parentViewId: uuid('parent_view_id'),
   },
   (t) => [primaryKey({ columns: [t.userId, t.viewId] })],
+);
+
+/**
+ * A merge, kept so it can be undone (owner answer Q4): which activities and followers
+ * moved from the merged ticket into the survivor.
+ */
+export const ticketMerges = pgTable(
+  'ticket_merges',
+  {
+    id: serial('id').primaryKey(),
+    survivorId: integer('survivor_id')
+      .notNull()
+      .references(() => tickets.id),
+    mergedId: integer('merged_id')
+      .notNull()
+      .references(() => tickets.id),
+    activityIds: uuid('activity_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
+    addedFollowerIds: uuid('added_follower_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
+    createdById: uuid('created_by_id').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    undoneAt: timestamp('undone_at', { withTimezone: true }),
+    undoneById: uuid('undone_by_id').references(() => users.id),
+  },
+  (t) => [index('ticket_merges_survivor_idx').on(t.survivorId)],
 );

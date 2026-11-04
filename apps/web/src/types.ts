@@ -6,6 +6,8 @@ export interface Me {
     email: string;
     name: string;
     type: UserType;
+    signature: string;
+    hasCustomSignature: boolean;
     totpEnabled: boolean;
     timezone: string;
     apiTokenCreatedAt: string | null;

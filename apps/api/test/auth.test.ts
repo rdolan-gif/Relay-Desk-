@@ -178,6 +178,18 @@ describe('authentication (spec 4, 18)', () => {
     expect(res.status).toBe(401);
   });
 
+  it('each person has a "Kind regards" signature by default and can change it (owner Q13)', async () => {
+    const agent = await loginAs(ctx.app, 'agent@relaydesk.local');
+    expect((await agent.get('/api/auth/me')).body.user).toMatchObject({
+      signature: 'Kind regards,\nAlex Agent',
+      hasCustomSignature: false,
+    });
+    const res = await agent.patch('/api/auth/me', { signature: 'Many thanks,\nAlex\nSupport team' });
+    expect(res.body.user).toMatchObject({ signature: 'Many thanks,\nAlex\nSupport team', hasCustomSignature: true });
+    const reset = await agent.patch('/api/auth/me', { signature: null });
+    expect(reset.body.user.signature).toBe('Kind regards,\nAlex Agent');
+  });
+
   it('health endpoints are public', async () => {
     const server = ctx.app.getHttpServer();
     expect((await request(server).get('/api/health/live')).status).toBe(200);

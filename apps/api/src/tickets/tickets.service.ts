@@ -9,6 +9,7 @@ import {
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import {
   applySaveRules,
+  archivedEditViolations,
   automaticState,
   canCreateInCategory,
   canDeleteTicket,
@@ -34,17 +35,18 @@ import { CustomFieldsService } from '../crm/custom-fields.service';
 import { formError } from '../crm/form-errors';
 import { DB, type Db, type DbOrTx } from '../db/db';
 import {
-  accounts,
   activities,
   categories,
   contacts,
   crmRecords,
   ticketFavourites,
   ticketFollowers,
+  ticketMerges,
   tickets,
   users,
 } from '../db/schema';
 import { HistoryService } from '../history/history.service';
+import { AccountsService } from '../crm/accounts.service';
 import { sanitizeRich } from './sanitize';
 import { TICKET_COLUMNS, ticketFilterFields } from './ticket-filters';
 import { TicketSettingsService } from './ticket-settings.service';
@@ -119,20 +121,27 @@ export class TicketsService {
     @Inject(HistoryService) private readonly history: HistoryService,
     @Inject(CustomFieldsService) private readonly fieldsService: CustomFieldsService,
     @Inject(TicketSettingsService) private readonly settings: TicketSettingsService,
+    @Inject(AccountsService) private readonly accounts: AccountsService,
   ) {}
 
   // ------------------------------------------------------------------ reading
 
-  /** Only tickets in categories where the caller has Access = Yes (spec 4). */
+  /**
+   * Only tickets in categories where the caller has Access = Yes (spec 4). Merged-away
+   * tickets are part of their survivor (owner Q4) and never appear on their own.
+   */
   categoryScope(auth: AuthContext): SQL | undefined {
     const ids = visibleCategoryIds(auth.ticketRights);
-    return scopeSql(tickets.categoryId, ids === 'all' ? { all: true } : { all: false, ids });
+    return and(
+      isNull(tickets.mergedIntoId),
+      scopeSql(tickets.categoryId, ids === 'all' ? { all: true } : { all: false, ids }),
+    );
   }
 
-  async list(auth: AuthContext, q: ListQuery, extraConditions: FilterCondition[] = []) {
+  async list(auth: AuthContext, q: ListQuery, extraConditions: FilterCondition[] = [], extraSql: SQL[] = []) {
     const fieldMap = await this.fieldsService.map();
     const defs = ticketFilterFields(fieldMap.values());
-    const where: (SQL | undefined)[] = [isNull(tickets.deletedAt), this.categoryScope(auth)];
+    const where: (SQL | undefined)[] = [isNull(tickets.deletedAt), this.categoryScope(auth), ...extraSql];
     if (q.q) where.push(this.searchSql(q.q));
     const own = q.filter ? (JSON.parse(q.filter) as FilterCondition[]) : [];
     const all = [...extraConditions, ...(Array.isArray(own) ? own : [])].map((c) =>
@@ -175,6 +184,15 @@ export class TicketsService {
     );
   }
 
+  /** Tickets whose contact belongs to one of these accounts (a branch, or a company and its branches). */
+  listForAccounts(auth: AuthContext, accountIds: string[], q: ListQuery) {
+    const contactIds = this.db
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(and(inArray(contacts.accountId, accountIds), isNull(contacts.deletedAt)));
+    return this.list(auth, q, [], [inArray(tickets.contactId, contactIds)]);
+  }
+
   /** Title, description, comment text, or the ticket number ("123" or "#123"). */
   searchSql(term: string): SQL {
     const like = likeTerm(term);
@@ -195,7 +213,24 @@ export class TicketsService {
       .from(tickets)
       .where(and(eq(tickets.id, id), isNull(tickets.deletedAt)));
     if (!row || !canSeeCategory(auth.ticketRights, row.categoryId)) throw new NotFoundException();
+    if (row.mergedIntoId !== null) {
+      throw new NotFoundException({
+        message: `This ticket was merged into #${row.mergedIntoId}.`,
+        reason: 'merged',
+        mergedIntoId: row.mergedIntoId,
+      });
+    }
     return row;
+  }
+
+  /** Archived tickets are read-only; only un-archiving is allowed (owner Q9). */
+  assertNotArchived(t: Row) {
+    if (t.state === 'archived') {
+      throw new ConflictException({
+        message: 'Archived tickets are read-only. Un-archive the ticket to change it.',
+        reason: 'archived_read_only',
+      });
+    }
   }
 
   async get(auth: AuthContext, id: number) {
@@ -219,7 +254,7 @@ export class TicketsService {
     const children = await this.db
       .select({ id: tickets.id, title: tickets.title, state: tickets.state, categoryId: tickets.categoryId })
       .from(tickets)
-      .where(and(eq(tickets.parentId, id), isNull(tickets.deletedAt)))
+      .where(and(eq(tickets.parentId, id), isNull(tickets.deletedAt), isNull(tickets.mergedIntoId)))
       .orderBy(asc(tickets.id));
     const parent = t.parentId
       ? await this.db
@@ -246,6 +281,7 @@ export class TicketsService {
         .filter((c) => canSeeCategory(auth.ticketRights, c.categoryId))
         .map(({ categoryId: _c, ...c }) => c),
       contactCard: await this.contactCard(auth, t),
+      merges: await this.activeMerges(id),
     };
   }
 
@@ -254,12 +290,8 @@ export class TicketsService {
     if (!t.contactId) return null;
     const [c] = await this.db.select().from(contacts).where(eq(contacts.id, t.contactId));
     if (!c || !canSeeCrmDatabase(auth.rights, c.databaseId)) return null;
-    const [account] = c.accountId
-      ? await this.db
-          .select({ id: accounts.id, name: accounts.name })
-          .from(accounts)
-          .where(eq(accounts.id, c.accountId))
-      : [];
+    // Branch path, contact details and delivery addresses (owner Q2).
+    const account = c.accountId ? await this.accounts.cardSummary(c.accountId) : null;
     const other = await this.db
       .select({ id: tickets.id, title: tickets.title, state: tickets.state })
       .from(tickets)
@@ -409,6 +441,28 @@ export class TicketsService {
         reason: 'version_conflict',
         current: publicTicket(before),
       });
+    }
+    if (before.state === 'archived') {
+      const current: Record<string, unknown> = {
+        ...publicTicket(before),
+        followerIds: (await this.followerIds(id)).sort(),
+      };
+      const changed = Object.entries(input)
+        .filter(([k, v]) => k !== 'version' && v !== undefined)
+        .filter(([k, v]) => {
+          const cur = current[k];
+          const norm = (x: unknown) => (x instanceof Date ? x.toISOString() : Array.isArray(x) ? [...x].sort() : x);
+          return JSON.stringify(norm(v)) !== JSON.stringify(norm(cur));
+        })
+        .map(([k]) => k);
+      const violations = archivedEditViolations(before.state, changed, input.state);
+      if (violations.length) {
+        throw new ConflictException({
+          message: 'Archived tickets are read-only. Un-archive the ticket to change it.',
+          reason: 'archived_read_only',
+          fields: violations,
+        });
+      }
     }
     const categoryId = input.categoryId ?? before.categoryId;
     if (categoryId !== before.categoryId && !canCreateInCategory(auth.ticketRights, categoryId)) {
@@ -597,8 +651,9 @@ export class TicketsService {
   }
 
   /**
-   * Merge (spec 6.4): activities and followers move to the survivor; the others are
-   * archived with a link to it; history is written on every ticket involved.
+   * Merge (owner Q4): the tickets become one. Activities and followers move into the
+   * survivor and the merged tickets disappear from lists and search; each merge is
+   * recorded so it can be undone. Archived tickets are read-only and cannot be merged.
    */
   async merge(auth: AuthContext, ticketIds: number[], survivorId: number) {
     const ids = [...new Set(ticketIds)];
@@ -609,35 +664,32 @@ export class TicketsService {
       });
     }
     const rows = await Promise.all(ids.map((id) => this.find(auth, id)));
+    rows.forEach((r) => this.assertNotArchived(r));
     const merged = rows.filter((r) => r.id !== survivorId);
-    if (merged.some((r) => r.mergedIntoId !== null))
-      throw new ConflictException({ message: 'A ticket was already merged.', reason: 'already_merged' });
     await this.db.transaction(async (tx) => {
       const survivorFollowers = await this.followerIds(survivorId, tx);
-      const moved: string[] = [];
       for (const m of merged) {
         const acts = await tx
           .update(activities)
           .set({ ticketId: survivorId })
           .where(eq(activities.ticketId, m.id))
           .returning({ id: activities.id });
-        moved.push(...acts.map((a) => a.id));
-        const theirFollowers = await this.followerIds(m.id, tx);
-        for (const userId of theirFollowers)
-          await tx.insert(ticketFollowers).values({ ticketId: survivorId, userId }).onConflictDoNothing();
+        const current = await this.followerIds(survivorId, tx);
+        const added = (await this.followerIds(m.id, tx)).filter((u) => !current.includes(u));
+        for (const userId of added) await tx.insert(ticketFollowers).values({ ticketId: survivorId, userId });
+        await tx.insert(ticketMerges).values({
+          survivorId,
+          mergedId: m.id,
+          activityIds: acts.map((a) => a.id),
+          addedFollowerIds: added,
+          createdById: auth.user.id,
+        });
         await tx
           .update(tickets)
-          .set({
-            state: 'archived',
-            mergedIntoId: survivorId,
-            closedAt: m.closedAt ?? new Date(),
-            version: m.version + 1,
-            updatedAt: new Date(),
-          })
+          .set({ mergedIntoId: survivorId, version: m.version + 1, updatedAt: new Date() })
           .where(eq(tickets.id, m.id));
         await this.history.record(tx, auth, 'ticket', m.id, 'merge', [
           { field: 'mergedIntoId', old: null, new: survivorId },
-          ...(m.state !== 'archived' ? [{ field: 'state', old: m.state, new: 'archived' }] : []),
         ]);
       }
       const afterFollowers = await this.followerIds(survivorId, tx);
@@ -647,11 +699,68 @@ export class TicketsService {
         .where(eq(tickets.id, survivorId));
       await this.history.record(tx, auth, 'ticket', survivorId, 'merge', [
         { field: 'mergedTicketIds', old: null, new: merged.map((m) => m.id) },
-        ...(moved.length ? [{ field: 'activities', old: null, new: moved.length }] : []),
         ...diffFields({ followerIds: survivorFollowers.sort() }, { followerIds: afterFollowers.sort() }),
       ]);
     });
     return this.get(auth, survivorId);
+  }
+
+  /**
+   * Undoes a merge made in error (owner Q4): the merged ticket comes back with the
+   * activities and followers it brought, as they were.
+   */
+  async unmerge(auth: AuthContext, survivorId: number, mergeId: number) {
+    const survivor = await this.find(auth, survivorId);
+    this.assertNotArchived(survivor);
+    const [m] = await this.db
+      .select()
+      .from(ticketMerges)
+      .where(and(eq(ticketMerges.id, mergeId), eq(ticketMerges.survivorId, survivorId), isNull(ticketMerges.undoneAt)));
+    if (!m) throw new NotFoundException({ message: 'Unknown merge.', reason: 'unknown_merge' });
+    await this.db.transaction(async (tx) => {
+      if (m.activityIds.length) {
+        await tx
+          .update(activities)
+          .set({ ticketId: m.mergedId })
+          .where(and(inArray(activities.id, m.activityIds), eq(activities.ticketId, survivorId)));
+      }
+      if (m.addedFollowerIds.length) {
+        await tx
+          .delete(ticketFollowers)
+          .where(and(eq(ticketFollowers.ticketId, survivorId), inArray(ticketFollowers.userId, m.addedFollowerIds)));
+      }
+      const [restored] = await tx.select().from(tickets).where(eq(tickets.id, m.mergedId));
+      await tx
+        .update(tickets)
+        .set({ mergedIntoId: null, version: restored!.version + 1, updatedAt: new Date() })
+        .where(eq(tickets.id, m.mergedId));
+      await tx
+        .update(ticketMerges)
+        .set({ undoneAt: new Date(), undoneById: auth.user.id })
+        .where(eq(ticketMerges.id, m.id));
+      await this.history.record(tx, auth, 'ticket', m.mergedId, 'merge', [
+        { field: 'mergedIntoId', old: survivorId, new: null },
+      ]);
+      await this.history.record(tx, auth, 'ticket', survivorId, 'merge', [
+        { field: 'unmergedTicketId', old: null, new: m.mergedId },
+      ]);
+    });
+    return this.get(auth, survivorId);
+  }
+
+  /** Merges into this ticket that can still be undone. */
+  async activeMerges(id: number) {
+    return this.db
+      .select({
+        id: ticketMerges.id,
+        mergedId: ticketMerges.mergedId,
+        title: tickets.title,
+        createdAt: ticketMerges.createdAt,
+      })
+      .from(ticketMerges)
+      .innerJoin(tickets, eq(tickets.id, ticketMerges.mergedId))
+      .where(and(eq(ticketMerges.survivorId, id), isNull(ticketMerges.undoneAt)))
+      .orderBy(asc(ticketMerges.id));
   }
 
   /** Child ticket from a ticket or one of its activities: copies the contact (spec 6.4). */
@@ -661,6 +770,7 @@ export class TicketsService {
     input: { title: string; categoryId?: string; activityId?: string },
   ) {
     const parent = await this.find(auth, parentId);
+    this.assertNotArchived(parent);
     let description = '';
     if (input.activityId) {
       const [act] = await this.db

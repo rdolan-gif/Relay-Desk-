@@ -59,3 +59,13 @@ export function deactivationEffects(): DeactivationEffects {
 export function normaliseEmail(email: string): string {
   return email.trim().toLowerCase();
 }
+
+/** Default email sign-off (owner answer Q13); each person can change theirs in My account. */
+export function defaultSignature(name: string): string {
+  return `Kind regards,\n${name.trim()}`;
+}
+
+/** The signature used for a person: their own, or the default when they haven't set one. */
+export function effectiveSignature(stored: string | null, name: string): string {
+  return stored && stored.trim() ? stored : defaultSignature(name);
+}

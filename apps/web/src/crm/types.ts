@@ -48,10 +48,30 @@ export interface Contact {
   database?: { id: string; title: string } | null;
 }
 
+export interface Address {
+  label: string;
+  line1: string;
+  line2?: string;
+  town: string;
+  county?: string;
+  postcode: string;
+  country: string;
+  isDelivery: boolean;
+}
+
 export interface Account {
   id: string;
   databaseId: string;
   name: string;
+  parentId: string | null;
+  parentName: string | null;
+  branchCode: string | null;
+  path: string;
+  emails: string[];
+  phones: string[];
+  addresses: Address[];
+  branchCount?: number;
+  branches?: Account[];
   customFields: CustomValues;
   createdAt: string;
   updatedAt: string;

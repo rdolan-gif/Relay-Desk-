@@ -16,3 +16,4 @@ export * from './tickets/state.js';
 export * from './tickets/save-rules.js';
 export * from './tickets/rights.js';
 export * from './tickets/mentions.js';
+export * from './crm/accounts.js';

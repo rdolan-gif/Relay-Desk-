@@ -66,11 +66,28 @@ export interface TicketDetail extends Ticket {
     name: string;
     emails: string[];
     phones: string[];
-    account: { id: string; name: string } | null;
+    account: {
+      id: string;
+      name: string;
+      path: string;
+      company: { id: string; name: string } | null;
+      branchCode: string | null;
+      emails: string[];
+      phones: string[];
+      deliveryAddresses: {
+        label: string;
+        line1: string;
+        line2?: string;
+        town: string;
+        county?: string;
+        postcode: string;
+      }[];
+    } | null;
     otherOpenTickets: { id: number; title: string; state: TicketState }[];
     openRecordCount: number;
   } | null;
   visible?: boolean;
+  merges: { id: number; mergedId: number; title: string; createdAt: string }[];
 }
 
 export interface Activity {

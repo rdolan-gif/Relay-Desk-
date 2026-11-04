@@ -72,9 +72,25 @@ export const contactCreateSchema = z.object({
 });
 export const contactUpdateSchema = contactCreateSchema.partial();
 
+const addressSchema = z.object({
+  label: z.string().max(100).default(''),
+  line1: z.string().max(200),
+  line2: z.string().max(200).optional(),
+  town: z.string().max(100),
+  county: z.string().max(100).optional(),
+  postcode: z.string().max(20).default(''),
+  country: z.string().max(2).default('GB'),
+  isDelivery: z.boolean().default(false),
+});
+
 export const accountCreateSchema = z.object({
   databaseId: z.string().uuid(),
   name: z.string().trim().min(1).max(200),
+  parentId: z.string().uuid().nullable().optional(),
+  branchCode: z.string().trim().max(50).nullable().optional(),
+  emails: idList(20).optional(),
+  phones: idList(20).optional(),
+  addresses: z.array(addressSchema).max(50).optional(),
   customFields: customValues,
 });
 export const accountUpdateSchema = accountCreateSchema.partial();

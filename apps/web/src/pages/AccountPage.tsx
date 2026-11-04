@@ -1,4 +1,17 @@
-import { Alert, Button, Code, Group, Image, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
+import {
+  Alert,
+  Button,
+  Code,
+  Group,
+  Image,
+  Paper,
+  PasswordInput,
+  Stack,
+  Text,
+  TextInput,
+  Textarea,
+  Title,
+} from '@mantine/core';
 import QRCode from 'qrcode';
 import { useState } from 'react';
 import { api } from '../api';
@@ -11,10 +24,47 @@ export function AccountPage() {
   return (
     <Stack maw={560}>
       <Title order={2}>{t.account.title}</Title>
+      <SignatureSection />
       <PasswordSection />
       <TotpSection />
       <ApiTokenSection />
     </Stack>
+  );
+}
+
+/** Each person's sign-off for replies (owner answer Q13). */
+function SignatureSection() {
+  const { me, refresh } = useAuth();
+  const [value, setValue] = useState(me!.user.hasCustomSignature ? me!.user.signature : '');
+  const save = async () => {
+    try {
+      await api('PATCH', '/auth/me', { signature: value.trim() ? value : null });
+      await refresh();
+      notifyOk();
+    } catch (err) {
+      notifyError(err);
+    }
+  };
+  return (
+    <Paper withBorder p="md" component="section" aria-labelledby="sig-h">
+      <Stack>
+        <Title order={3} id="sig-h">
+          {t.account.signatureTitle}
+        </Title>
+        <Textarea
+          label={t.account.signatureTitle}
+          description={t.account.signatureHelp}
+          autosize
+          minRows={3}
+          placeholder={me!.user.signature}
+          value={value}
+          onChange={(e) => setValue(e.currentTarget.value)}
+        />
+        <Group>
+          <Button onClick={save}>{t.account.saveSignature}</Button>
+        </Group>
+      </Stack>
+    </Paper>
   );
 }
 

@@ -7,16 +7,16 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 
 ## From the spec (section 21)
 
-| #   | Question                                                          | Phase | Status / current assumption                                                                                                            |
-| --- | ----------------------------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| S-1 | Single company, or sold to many companies (multi-tenant)?         | 0     | **Decided (owner, 03/11/2026): single company.** One organisation per deployment; not for resale. No tenant scoping in the data model. |
-| S-2 | Is telephony out of v1, or needed later via an existing provider? | —     | Open. Data model keeps `Activity.channel` open (spec 2).                                                                               |
-| S-3 | Routing rules: first match wins, or all matches apply in order?   | 3     | Open. Spec default: first match wins.                                                                                                  |
-| S-4 | Merged-away tickets: archived, deleted, or kept as children?      | 2     | Open. Spec default: archived with a link to the survivor.                                                                              |
-| S-5 | Which fields, views and categories does the team use today?       | 1–2   | Open.                                                                                                                                  |
-| S-6 | Number of agents, mailboxes and emails per day?                   | 8     | Open. Spec targets used meanwhile (200 concurrent agents).                                                                             |
-| S-7 | Data migration from the current system via its REST API?          | —     | Open. Would add a migration phase.                                                                                                     |
-| S-8 | External portal in v1 or later?                                   | 7     | Open. External user type exists now; portal is Phase 7.                                                                                |
+| #   | Question                                                          | Phase | Status / current assumption                                                                                                                                                                                                                    |
+| --- | ----------------------------------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S-1 | Single company, or sold to many companies (multi-tenant)?         | 0     | **Decided (owner, 03/11/2026): single company.** One organisation per deployment; not for resale. No tenant scoping in the data model.                                                                                                         |
+| S-2 | Is telephony out of v1, or needed later via an existing provider? | —     | **Decided (owner):** no phone integration; calls stay on the landline system.                                                                                                                                                                  |
+| S-3 | Routing rules: first match wins, or all matches apply in order?   | 3     | **Decided (owner, 04/11/2026):** all matching rules apply, in order.                                                                                                                                                                           |
+| S-4 | Merged-away tickets: archived, deleted, or kept as children?      | 2     | **Decided (owner, 04/11/2026):** merged tickets become one (the merged ticket disappears into the survivor), and a merge can be undone. Built.                                                                                                 |
+| S-5 | Which fields, views and categories does the team use today?       | 1–2   | **Decided (owner):** categories Enquiries (Support inbox), Heather, Thierry, Ryan, Richard, Accounts & Returns, Resolution Centre, plus personal Ryan's/Thierry's/Heather's Tickets. Created by `pnpm db:setup:support`; editable in Settings. |
+| S-6 | Number of agents, mailboxes and emails per day?                   | 8     | **Answered (owner):** trial with 4 people (Richard, Ryan, Heather, Thierry); 4+ Gmail inboxes; ~20–30 emails/day to Support. Later possibly Lighting Design, Marketing, Technical, Production, Dispatch.                                       |
+| S-7 | Data migration from the current system via its REST API?          | —     | **Decided (owner):** no migration; contacts are created as needed. Customer master data stays in Unleashed.                                                                                                                                    |
+| S-8 | External portal in v1 or later?                                   | 7     | **Decided (owner):** not needed yet; Phase 7 portal work is deferred.                                                                                                                                                                          |
 
 ## Phase 0 decisions
 
@@ -81,32 +81,28 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 | Q-P2-15 | Date-time inputs              | Use the browser's own picker, which follows the computer's regional settings (DD/MM/YYYY on UK-configured machines).                       | Assumed  |
 | Q-P2-16 | "Sessions view" in History    | Comes with time tracking (spec 6.5, [SHOULD]); "Hide activities" is built.                                                                 | Assumed  |
 
-## Questions for the owner — 04/11/2026, 08:00
+## Owner answers, 04/11/2026
 
-1. **Click to email.** You chose copy buttons. Should email addresses also open your mail
-   program (Outlook etc.) until ticket email arrives in Phase 3? (Quick yes/no.)
-2. **Your real CRM layout.** What does your team keep on contacts and accounts today, and do
-   you need more than one CRM database (e.g. per brand or team)? What long-lived records do
-   you track (deals, contracts, complaints, orders)? I'll replace the demo data with yours.
-3. **Phase 2 (tickets) inputs.** Which ticket categories and statuses do you use now, and which
-   fields go on ticket forms?
-4. **Merging tickets (S-4).** When two tickets are merged, should the merged-away ticket be
-   archived with a link (spec default), deleted, or kept as a child?
-5. **Volumes (S-6).** Roughly how many agents, mailboxes and emails per day?
-6. **Migration (S-7).** Do you need your existing tickets, contacts and history brought across
-   from the current system?
-7. **Customer portal (S-8).** Needed in v1, or later?
-8. **Email routing (S-3, Phase 3).** When several routing rules match an email, should only the
-   first apply, or all of them in order?
-9. **Archived tickets (Q-P2-4).** Should Archived tickets be fully read-only for staff, or can
-   they still be edited (e.g. moved back to Open by hand)?
-10. **Mentions (Q-P2-3).** Is picking people from a "Mention" list next to the comment box
-    fine, or do you want inline "@name" autocomplete while typing?
-11. **Ticket categories and SLAs (Phase 4 prep).** What response and resolution times do you
-    promise customers, per priority, and what are your working hours and holidays?
-12. **Email provider (Phase 3 blocker).** Are your support mailboxes on Microsoft 365, Google
-    Workspace or another provider (IMAP/SMTP)? Which addresses (e.g. support@, billing@), and
-    which category should each one feed? Microsoft 365 and Google need an app registration by
-    your IT admin; I'll provide step-by-step instructions.
-13. **Auto-responses and signatures (Phase 3).** Do you want an automatic "we've received your
-    email" reply, and what wording? One shared signature or one per agent/mailbox?
+| #   | Topic                        | Decision                                                                                                                                                                                                                                               | Status     |
+| --- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| O-1 | Inboxes                      | Four Gmail inboxes to start: Support (shared, feeds **Enquiries**) and Ryan's, Thierry's and Heather's personal inboxes, each feeding that person's private category.                                                                                  | Phase 3    |
+| O-2 | Gmail connection             | Use the free **Gmail API** (Google Cloud project + OAuth), not a paid connector or IMAP.                                                                                                                                                               | Phase 3    |
+| O-3 | Automated mail               | Personal inboxes receive many automated emails; Relay Desk should filter them out and only create tickets for important ones.                                                                                                                          | Phase 3    |
+| O-4 | Customer branches            | Accounts can be Company › Branch › Branch number. Each account holds phones, emails and addresses; delivery addresses, branch details and the path show on the ticket's contact card; a branch's (or company's) tickets are listed on its page. Built. | Decided    |
+| O-5 | Unleashed                    | Customer records stay in Unleashed; Relay Desk keeps a lighter contact list created as tickets come in. No integration for now.                                                                                                                        | Decided    |
+| O-6 | Templates and auto-responses | Agents create templates and auto-responses themselves; nothing is hard-wired.                                                                                                                                                                          | Phase 3    |
+| O-7 | Signature                    | Each person has a signature, defaulting to "Kind regards," and their name, editable in My account. Built.                                                                                                                                              | Decided    |
+| O-8 | Reply target                 | Aim to reply to every email within 24 hours. Working hours Mon–Thu 08:30–17:00, Fri 08:30–16:00 (Europe/London, UK bank holidays).                                                                                                                     | Phase 4    |
+| O-9 | Cost                         | Keep it cost-effective: free tiers and self-hosted components where possible.                                                                                                                                                                          | All phases |
+
+## Questions for the owner
+
+1. **24-hour target (O-8).** Should "within 24 hours" count working hours only (e.g. an email at 16:00 on
+   Friday is due by 16:00 on Monday) or clock hours (due 16:00 Saturday)? Working hours is the usual
+   choice and what the SLA engine supports.
+2. **Google Workspace or personal Gmail?** Are the four inboxes on a company Google Workspace domain
+   (e.g. support@yourcompany.co.uk) or free @gmail.com accounts? This changes the Google sign-in setup.
+3. **Automated mail (O-3).** Which senders count as automated for you? A few examples (newsletters,
+   supplier systems, delivery notifications) will help seed the filter rules.
+4. **Hosting.** Where should Relay Desk run? A small UK/EU cloud server (roughly £10–20 a month) is
+   enough for the trial; I can write the setup steps.

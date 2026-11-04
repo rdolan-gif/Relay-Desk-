@@ -152,3 +152,18 @@ export function isDueForAutoArchive(
 export function isDueForReopen(state: TicketState, reopenAt: Date | null, now: Date): boolean {
   return (state === 'waiting' || state === 'closed') && !!reopenAt && reopenAt.getTime() <= now.getTime();
 }
+
+/**
+ * Archived tickets are read-only (owner answer Q9, 04/11/2026). The only allowed change
+ * is un-archiving: setting the state to Open, Waiting or Closed, after which the ticket
+ * behaves as a standard ticket again. Returns the fields that may not change.
+ */
+export function archivedEditViolations(
+  beforeState: TicketState,
+  changedFields: readonly string[],
+  newState: TicketState | undefined,
+): string[] {
+  if (beforeState !== 'archived') return [];
+  const unarchiving = newState !== undefined && newState !== 'archived';
+  return unarchiving ? changedFields.filter((f) => f !== 'state') : [...changedFields];
+}

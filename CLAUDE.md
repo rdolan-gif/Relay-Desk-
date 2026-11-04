@@ -35,6 +35,7 @@ docker compose up -d postgres redis minio mailpit   # or use a local Postgres 16
 pnpm build            # domain must be built before api/web typecheck (types come from dist)
 pnpm db:migrate       # apply drizzle migrations to DATABASE_URL
 pnpm db:seed          # idempotent demo data; dev password harbour-lantern-violet-42
+pnpm db:setup:support # the Support team's categories, rights and views (add `-- --demo` for demo people/tickets)
 pnpm dev:api          # http://localhost:3000/api (tsx watch)
 pnpm dev:web          # http://localhost:5173 (proxies /api to :3000)
 pnpm lint && pnpm typecheck
@@ -82,5 +83,12 @@ Integration tests drop and recreate the schema of `TEST_DATABASE_URL`
   `automaticState`/`resolveState`; tickets are scoped by `auth.ticketRights` (category Access)
   via `TicketsService.find()` / `categoryScope()`. Comment/description HTML goes through
   `sanitizeRich`.
+- **Merges and archives**: merged tickets keep `merged_into_id` and are excluded by
+  `categoryScope()`; `ticket_merges` records what moved so `unmerge` can restore it. Archived
+  tickets are read-only (`assertNotArchived`, `archivedEditViolations`); only un-archiving is allowed.
+- **Accounts** can be Company › Branch (`parent_id`, one level only, `checkBranchParent`); show
+  `path` rather than `name`.
+- **Owner decisions** in `docs/open-questions.md` (S-_, O-_) override spec defaults; Phase 3 uses
+  the free Gmail API, and all matching email routing rules apply in order.
 - **Filters**: validate with domain `validateConditions`, translate with `filterSql`; keep
   `matchesConditions` (domain) and `conditionToSql` (API) in agreement.

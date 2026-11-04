@@ -44,6 +44,7 @@ export class ActivitiesService {
    */
   async addComment(auth: AuthContext, ticketId: number, input: CommentInput) {
     const t = await this.ticketsService.find(auth, ticketId);
+    this.ticketsService.assertNotArchived(t);
     const body = sanitizeRich(input.bodyHtml);
     if (!htmlToText(body)) throw new BadRequestException({ message: 'The comment is empty.', reason: 'empty_comment' });
     if (input.isExternal) {
@@ -90,7 +91,7 @@ export class ActivitiesService {
 
   /** Authors edit their own comments; each edit is logged in History (spec 6.2). */
   async editComment(auth: AuthContext, ticketId: number, activityId: string, input: CommentInput) {
-    await this.ticketsService.find(auth, ticketId);
+    this.ticketsService.assertNotArchived(await this.ticketsService.find(auth, ticketId));
     const a = await this.findActivity(ticketId, activityId);
     if (a.type !== 'comment')
       throw new BadRequestException({ message: 'Only comments can be edited.', reason: 'not_a_comment' });
@@ -123,10 +124,11 @@ export class ActivitiesService {
     this.ticketsService.assertMoveAllowed(auth);
     if (ticketId === targetTicketId)
       throw new BadRequestException({ message: 'Choose a different ticket.', reason: 'same_ticket' });
-    await this.ticketsService.find(auth, ticketId);
-    await this.ticketsService.find(auth, targetTicketId).catch(() => {
+    this.ticketsService.assertNotArchived(await this.ticketsService.find(auth, ticketId));
+    const target = await this.ticketsService.find(auth, targetTicketId).catch(() => {
       throw new NotFoundException({ message: 'Unknown target ticket.', reason: 'unknown_ticket' });
     });
+    this.ticketsService.assertNotArchived(target);
     await this.findActivity(ticketId, activityId);
     await this.db.transaction(async (tx) => {
       await tx.update(activities).set({ ticketId: targetTicketId }).where(eq(activities.id, activityId));

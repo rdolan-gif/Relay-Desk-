@@ -3,8 +3,10 @@ import { fullAccessProfile } from '@relay-desk/domain';
 import { PasswordService } from '../auth/password.service';
 import { createDb, createPool, type Db } from './db';
 import { DEFAULT_SEED_PASSWORD, seed } from './seed';
+import type { Address } from '@relay-desk/domain';
 import {
   accessProfiles,
+  accounts,
   activities,
   categories,
   categoryStatuses,
@@ -200,7 +202,55 @@ async function demoData(
 
   const [existing] = await db.select().from(tickets).where(eq(tickets.categoryId, cat.Enquiries!)).limit(1);
   if (existing) return;
-  const [sam] = await db.select().from(contacts).where(eq(contacts.name, 'Sam Smith'));
+
+  // A fictitious customer with branches: Company › Branch › Branch number (owner Q2).
+  const [customersDb] = await db.select().from(crmDatabases).where(eq(crmDatabases.isDefault, true));
+  const [northgate] = await db
+    .insert(accounts)
+    .values({ databaseId: customersDb!.id, name: 'Northgate Electrical', phones: ['+441619460000'] })
+    .returning();
+  const branch = async (name: string, code: string, phone: string, email: string, address: Address) =>
+    (
+      await db
+        .insert(accounts)
+        .values({
+          databaseId: customersDb!.id,
+          name,
+          parentId: northgate!.id,
+          branchCode: code,
+          phones: [phone],
+          emails: [email],
+          addresses: [address],
+        })
+        .returning()
+    )[0]!;
+  const leeds = await branch('Leeds', '0345', '+441134960321', 'leeds@northgate-electrical.example', {
+    label: 'Goods in',
+    line1: 'Unit 4, Kirkstall Trade Park',
+    town: 'Leeds',
+    postcode: 'LS5 3BT',
+    country: 'GB',
+    isDelivery: true,
+  });
+  await branch('Sheffield', '0412', '+441144960555', 'sheffield@northgate-electrical.example', {
+    label: 'Trade counter',
+    line1: '17 Attercliffe Road',
+    town: 'Sheffield',
+    postcode: 'S4 7WZ',
+    country: 'GB',
+    isDelivery: true,
+  });
+  const [dana] = await db
+    .insert(contacts)
+    .values({
+      databaseId: customersDb!.id,
+      name: 'Dana Whitfield',
+      emails: ['dana.whitfield@northgate-electrical.example'],
+      phones: ['+447911654456'],
+      accountId: leeds.id,
+    })
+    .returning();
+  const sam = dana;
   const [priya] = await db.select().from(contacts).where(eq(contacts.name, 'Priya Patel'));
   const hours = (h: number) => new Date(Date.now() - h * 3_600_000);
   const demo: {

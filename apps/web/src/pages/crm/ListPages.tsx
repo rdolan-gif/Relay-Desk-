@@ -96,7 +96,8 @@ export function AccountsPage() {
   if (!meta.data) return null;
   const tz = me!.user.timezone;
   const columns: Column<Account>[] = [
-    { key: 'name', label: t.crm.name, render: (a) => a.name, sortKey: 'name' },
+    { key: 'name', label: t.crm.name, render: (a) => a.path, sortKey: 'name' },
+    { key: 'branchCount', label: t.crm.branchCount, render: (a) => a.branchCount ?? 0 },
     { key: 'contactCount', label: t.crm.contactCount, render: (a) => a.contactCount ?? 0 },
     { key: 'databaseTitle', label: t.crm.database, render: (a) => a.databaseTitle },
     { key: 'createdAt', label: t.crm.created, render: (a) => formatDateTime(a.createdAt, tz), sortKey: 'createdAt' },
@@ -109,7 +110,7 @@ export function AccountsPage() {
       title={t.crm.accounts}
       endpoint="/crm/accounts"
       columns={columns}
-      defaultColumns={['name', 'contactCount', 'databaseTitle', 'updatedAt']}
+      defaultColumns={['name', 'branchCount', 'contactCount', 'updatedAt']}
       filterFields={meta.data.filterFields.accounts}
       filterChoices={filterChoices(meta.data.customFields, {
         databaseId: meta.data.databases.map((d) => ({ value: d.id, label: d.title })),

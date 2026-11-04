@@ -202,7 +202,8 @@ export function TicketPage() {
   const tk = ticket.data;
   const category = meta.data.categories.find((c) => c.id === draft.categoryId);
   const shown: Draft = viewAt && snapshot.data ? { ...draft, ...snapshot.data } : draft;
-  const readOnly = !!viewAt || !can('tickets', isNew ? 'create' : 'update');
+  const archived = tk?.state === 'archived';
+  const readOnly = !!viewAt || archived || !can('tickets', isNew ? 'create' : 'update');
   const set = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch });
   const statusOptions = meta.data.statuses
     .filter((s) => category?.statusIds.includes(s.id) || shown.statusIds.includes(s.id))
@@ -511,6 +512,51 @@ export function TicketPage() {
           </Group>
         </Alert>
       )}
+      {params.get('mergedFrom') && (
+        <Alert color="blue">{t.tickets.redirectedFromMerge(Number(params.get('mergedFrom')))}</Alert>
+      )}
+      {archived && (
+        <Alert color="gray">
+          <Group justify="space-between">
+            <Text size="sm">{t.tickets.archivedReadOnly}</Text>
+            {can('tickets', 'update') && (
+              <Button
+                size="compact-sm"
+                onClick={() =>
+                  action.mutate(() => api('PATCH', `/tickets/${id}`, { state: 'open', version: tk!.version }))
+                }
+              >
+                {t.tickets.unarchive}
+              </Button>
+            )}
+          </Group>
+        </Alert>
+      )}
+      {tk && tk.merges.length > 0 && (
+        <Paper withBorder p="xs">
+          <Stack gap={4}>
+            <Text size="sm" fw={600}>
+              {t.tickets.mergedHere}
+            </Text>
+            {tk.merges.map((m) => (
+              <Group key={m.id} justify="space-between">
+                <Text size="sm">
+                  #{m.mergedId} {m.title} · {formatDateTime(m.createdAt, me!.user.timezone)}
+                </Text>
+                {meta.data.can.merge && !archived && (
+                  <Button
+                    size="compact-xs"
+                    variant="light"
+                    onClick={() => action.mutate(() => api('POST', `/tickets/${id}/merges/${m.id}/undo`))}
+                  >
+                    {t.tickets.undoMerge}
+                  </Button>
+                )}
+              </Group>
+            ))}
+          </Stack>
+        </Paper>
+      )}
       {viewAt && (
         <Alert color="blue">
           <Group justify="space-between">
@@ -549,7 +595,7 @@ export function TicketPage() {
                       onMove={() => (setModalValue(''), setModal({ kind: 'move', activityId: a.id }))}
                     />
                   ))}
-                  {can('tickets', 'update') && (
+                  {can('tickets', 'update') && !archived && (
                     <Paper withBorder p="sm">
                       <Stack gap="xs">
                         <RichTextEditor
@@ -717,13 +763,31 @@ function ContactCard({ card }: { card: NonNullable<TicketDetail['contactCard']> 
         <Anchor component={Link} to={`/crm/contacts/${card.id}`} fw={600}>
           {card.name}
         </Anchor>
-        {card.account && (
-          <Anchor component={Link} to={`/crm/accounts/${card.account.id}`} size="sm">
-            {card.account.name}
-          </Anchor>
-        )}
         {card.emails[0] && <CopyValue value={card.emails[0]} />}
         {card.phones[0] && <CopyValue value={formatPhoneForDisplay(card.phones[0])} />}
+        {card.account && (
+          <Anchor component={Link} to={`/crm/accounts/${card.account.id}`} size="sm" fw={500}>
+            {card.account.path}
+          </Anchor>
+        )}
+        {card.account?.phones.map((p) => (
+          <CopyValue key={p} value={formatPhoneForDisplay(p)} />
+        ))}
+        {card.account?.emails.map((e) => (
+          <CopyValue key={e} value={e} />
+        ))}
+        {card.account && card.account.deliveryAddresses.length > 0 && (
+          <>
+            <Text size="xs" fw={600}>
+              {t.crm.deliveryAddresses}
+            </Text>
+            {card.account.deliveryAddresses.map((a, i) => (
+              <Text key={i} size="xs">
+                <b>{a.label}:</b> {[a.line1, a.line2, a.town, a.county, a.postcode].filter(Boolean).join(', ')}
+              </Text>
+            ))}
+          </>
+        )}
         <Text size="xs" c="dimmed">
           {t.tickets.openRecords(card.openRecordCount)}
         </Text>

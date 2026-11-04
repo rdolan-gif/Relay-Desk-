@@ -188,21 +188,46 @@ describe('tickets (spec 6, 7)', () => {
   });
 
   describe('merge, parent/child, move (spec 6.4)', () => {
-    it('merging moves activities and followers to the survivor and archives the others with a link', async () => {
+    it('when tickets are merged they become one: activities and followers move in and the other disappears (owner Q4)', async () => {
       const a = await create(agent);
-      const b = await create(agent);
+      const b = await create(agent, { title: 'Zebra duplicate' });
       await agent.post(`/api/tickets/${b.id}/comments`, { bodyHtml: '<p>On B</p>' });
       await admin.post(`/api/tickets/${b.id}/follow`);
       const res = await agent.post('/api/tickets/merge', { ticketIds: [a.id, b.id], survivorId: a.id });
       expect(res.status).toBe(200);
       expect(res.body.followers.map((f: { id: string }) => f.id).sort()).toEqual([admin.userId, agent.userId].sort());
+      expect(res.body.merges).toEqual([expect.objectContaining({ mergedId: b.id, title: 'Zebra duplicate' })]);
       expect(
         (await agent.get(`/api/tickets/${a.id}/activities`)).body.map((x: { bodyHtml: string }) => x.bodyHtml),
       ).toEqual(['<p>On B</p>']);
-      const merged = (await agent.get(`/api/tickets/${b.id}`)).body;
-      expect(merged).toMatchObject({ state: 'archived', mergedIntoId: a.id });
+      const gone = await agent.get(`/api/tickets/${b.id}`);
+      expect(gone.status).toBe(404);
+      expect(gone.body).toMatchObject({ reason: 'merged', mergedIntoId: a.id });
+      expect((await agent.get('/api/tickets?q=Zebra')).body.total).toBe(0);
       expect((await agent.get(`/api/tickets/${a.id}/history`)).body.at(-1).action).toBe('merge');
-      expect((await agent.get(`/api/tickets/${b.id}/history`)).body.at(-1).action).toBe('merge');
+    });
+
+    it('a merge can be undone: the ticket returns with the activities and followers it brought (owner Q4)', async () => {
+      const a = await create(agent);
+      const b = await create(agent, { title: 'Wrongly merged' });
+      await agent.post(`/api/tickets/${a.id}/comments`, { bodyHtml: '<p>On A</p>' });
+      await agent.post(`/api/tickets/${b.id}/comments`, { bodyHtml: '<p>On B</p>' });
+      await admin.post(`/api/tickets/${b.id}/follow`);
+      const merged = (await agent.post('/api/tickets/merge', { ticketIds: [a.id, b.id], survivorId: a.id })).body;
+      const undo = await agent.post(`/api/tickets/${a.id}/merges/${merged.merges[0].id}/undo`);
+      expect(undo.status).toBe(200);
+      expect(undo.body.merges).toEqual([]);
+      expect(undo.body.followers.map((f: { id: string }) => f.id)).toEqual([agent.userId]);
+      expect(
+        (await agent.get(`/api/tickets/${a.id}/activities`)).body.map((x: { bodyHtml: string }) => x.bodyHtml),
+      ).toEqual(['<p>On A</p>']);
+      const back = await agent.get(`/api/tickets/${b.id}`);
+      expect(back.status).toBe(200);
+      expect(back.body.mergedIntoId).toBeNull();
+      expect(
+        (await agent.get(`/api/tickets/${b.id}/activities`)).body.map((x: { bodyHtml: string }) => x.bodyHtml),
+      ).toEqual(['<p>On B</p>']);
+      expect((await agent.post(`/api/tickets/${a.id}/merges/${merged.merges[0].id}/undo`)).status).toBe(404);
     });
 
     it('merge needs the merge permission', async () => {
@@ -231,6 +256,42 @@ describe('tickets (spec 6, 7)', () => {
       const res = await agent.patch(`/api/tickets/${a.id}`, { parentId: b.id });
       expect(res.status).toBe(400);
       expect(res.body.fieldErrors[0].code).toBe('cycle');
+    });
+  });
+
+  describe('archived tickets (owner Q9)', () => {
+    it('when a ticket is Archived it is read-only: edits, comments, moves, merges and children are refused', async () => {
+      const t = await create(agent, { userId: agent.userId });
+      const other = await create(agent);
+      const c = (await agent.post(`/api/tickets/${t.id}/comments`, { bodyHtml: '<p>x</p>' })).body;
+      await agent.patch(`/api/tickets/${t.id}`, { state: 'archived' });
+      const edit = await agent.patch(`/api/tickets/${t.id}`, { title: 'Changed' });
+      expect(edit.status).toBe(409);
+      expect(edit.body).toMatchObject({ reason: 'archived_read_only', fields: ['title'] });
+      expect((await agent.post(`/api/tickets/${t.id}/comments`, { bodyHtml: '<p>y</p>' })).body.reason).toBe(
+        'archived_read_only',
+      );
+      expect(
+        (await agent.post(`/api/tickets/${t.id}/activities/${c.id}/move`, { targetTicketId: other.id })).body.reason,
+      ).toBe('archived_read_only');
+      expect(
+        (await agent.post('/api/tickets/merge', { ticketIds: [t.id, other.id], survivorId: other.id })).body.reason,
+      ).toBe('archived_read_only');
+      expect((await agent.post(`/api/tickets/${t.id}/children`, { title: 'Child' })).body.reason).toBe(
+        'archived_read_only',
+      );
+    });
+
+    it('an Archived ticket can be un-archived and then behaves as a standard ticket', async () => {
+      const t = await create(agent, { userId: agent.userId });
+      await agent.patch(`/api/tickets/${t.id}`, { state: 'archived' });
+      const mixed = await agent.patch(`/api/tickets/${t.id}`, { state: 'open', title: 'Both at once' });
+      expect(mixed.body.reason).toBe('archived_read_only');
+      const back = await agent.patch(`/api/tickets/${t.id}`, { state: 'open' });
+      expect(back.status).toBe(200);
+      expect(back.body.state).toBe('open');
+      expect((await agent.patch(`/api/tickets/${t.id}`, { title: 'Editable again' })).status).toBe(200);
+      expect((await agent.post(`/api/tickets/${t.id}/comments`, { bodyHtml: '<p>ok</p>' })).status).toBe(201);
     });
   });
 

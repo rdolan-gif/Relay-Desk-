@@ -111,7 +111,8 @@ describe('Phase 2 acceptance', () => {
     it('anything on an Archived ticket: a comment by another user does not reopen it', async () => {
       const t = await newTicket(agent, { userId: agent.userId });
       await setState(agent, t.id, 'archived');
-      await comment(admin, t.id);
+      // Archived tickets are read-only (owner Q9), so the comment itself is refused.
+      expect((await comment(admin, t.id)).body.reason).toBe('archived_read_only');
       expect(await stateOf(t.id)).toBe('archived');
     });
   });

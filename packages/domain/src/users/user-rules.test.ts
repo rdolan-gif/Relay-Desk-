@@ -88,3 +88,12 @@ describe('user type rules (spec 4)', () => {
     expect(normaliseEmail('  Jane.Doe@Example.COM ')).toBe('jane.doe@example.com');
   });
 });
+
+describe('signatures (owner Q13)', () => {
+  it('each person gets "Kind regards, <name>" unless they set their own', async () => {
+    const { effectiveSignature } = await import('./user-rules.js');
+    expect(effectiveSignature(null, 'Ryan')).toBe('Kind regards,\nRyan');
+    expect(effectiveSignature('  ', 'Ryan')).toBe('Kind regards,\nRyan');
+    expect(effectiveSignature('Cheers,\nRy', 'Ryan')).toBe('Cheers,\nRy');
+  });
+});

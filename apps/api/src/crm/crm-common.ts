@@ -54,6 +54,7 @@ export const SYSTEM_FILTER_FIELDS: Record<Exclude<ListName, 'tickets'>, FilterFi
   ],
   accounts: [
     { key: 'name', label: 'Name', kind: 'text' },
+    { key: 'parentId', label: 'Company', kind: 'ref' },
     { key: 'databaseId', label: 'CRM database', kind: 'ref' },
     { key: 'createdAt', label: 'Created', kind: 'datetime' },
     { key: 'updatedAt', label: 'Updated', kind: 'datetime' },

@@ -1,9 +1,10 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Patch, Post, Req, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { CONFIG, type AppConfig } from '../config/config';
+import { effectiveSignature } from '@relay-desk/domain';
 import { ZodPipe } from '../common/zod.pipe';
 import { clientIp, type AppRequest, type AuthContext } from '../common/request-context';
 import { DB, type Db } from '../db/db';
@@ -19,6 +20,7 @@ const loginSchema = z.object({
 });
 const passwordSchema = z.object({ currentPassword: z.string().min(1), newPassword: z.string().min(1).max(256) });
 const codeSchema = z.object({ code: z.string().min(1).max(10) });
+const profileSchema = z.object({ signature: z.string().max(2000).nullable().optional() });
 const disableTotpSchema = z.object({ password: z.string().min(1), code: z.string().min(1).max(10) });
 
 @ApiTags('auth')
@@ -64,15 +66,41 @@ export class AuthController {
   @Get('me')
   async me(@Auth() auth: AuthContext) {
     const [row] = await this.db
-      .select({ totpEnabled: users.totpEnabled, timezone: users.timezone, apiTokenCreatedAt: users.apiTokenCreatedAt })
+      .select({
+        signature: users.signature,
+        totpEnabled: users.totpEnabled,
+        timezone: users.timezone,
+        apiTokenCreatedAt: users.apiTokenCreatedAt,
+      })
       .from(users)
       .where(eq(users.id, auth.user.id));
     return {
-      user: { ...auth.user, ...row },
+      user: {
+        ...auth.user,
+        ...row,
+        signature: effectiveSignature(row?.signature ?? null, auth.user.name),
+        hasCustomSignature: !!row?.signature?.trim(),
+      },
       access: auth.principal.access,
       rights: auth.rights,
       csrfToken: auth.csrfToken,
     };
+  }
+
+  /** The caller's own preferences (currently the email signature). */
+  @AuthenticatedOnly()
+  @Patch('me')
+  async updateProfile(
+    @Auth() auth: AuthContext,
+    @Body(new ZodPipe(profileSchema)) body: z.infer<typeof profileSchema>,
+  ) {
+    if (body.signature !== undefined) {
+      await this.db
+        .update(users)
+        .set({ signature: body.signature?.trim() ? body.signature : null, updatedAt: new Date() })
+        .where(eq(users.id, auth.user.id));
+    }
+    return this.me(auth);
   }
 
   @AuthenticatedOnly()

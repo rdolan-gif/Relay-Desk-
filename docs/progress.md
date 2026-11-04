@@ -1,5 +1,15 @@
 # Build progress
 
+## Owner answers applied (04/11/2026)
+
+| Change                                                                                                                      | Test                                                                                   |
+| --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Merged tickets become one; merges can be undone (activities and followers return)                                           | `apps/api/test/tickets.test.ts` (merge, parent/child, move)                            |
+| Archived tickets are read-only; Un-archive returns them to a standard ticket                                                | `packages/domain/src/tickets/save-rules.test.ts`, `tickets.test.ts` (archived tickets) |
+| Per-person signature, default "Kind regards, <name>"                                                                        | `packages/domain/src/users/user-rules.test.ts`, `apps/api/test/auth.test.ts`           |
+| Company › Branch › Branch number with phones, emails and addresses; branch card on tickets; branch and company ticket lists | `packages/domain/src/crm/accounts.test.ts`, `apps/api/test/branches.test.ts`           |
+| Support team structure (categories, rights, views)                                                                          | `pnpm db:setup:support` (add `-- --demo` for demo users and data)                      |
+
 ## Phase 2 — Tickets without email ✅
 
 Scope (spec 20): categories (all settings in 7.1), statuses, priorities, ticket CRUD, list,

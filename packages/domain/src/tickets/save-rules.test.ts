@@ -218,3 +218,19 @@ describe('followers and mentions (spec 13)', () => {
     expect(newMentions(['a'], ['a', 'b', 'b'])).toEqual(['b']);
   });
 });
+
+describe('archived tickets are read-only (owner Q9)', () => {
+  it('when an Archived ticket is edited, every changed field is refused', async () => {
+    const { archivedEditViolations } = await import('./save-rules.js');
+    expect(archivedEditViolations('archived', ['title', 'priority'], undefined)).toEqual(['title', 'priority']);
+  });
+  it('un-archiving (state back to Open, Waiting or Closed) is allowed on its own', async () => {
+    const { archivedEditViolations } = await import('./save-rules.js');
+    expect(archivedEditViolations('archived', ['state'], 'open')).toEqual([]);
+    expect(archivedEditViolations('archived', ['state', 'title'], 'closed')).toEqual(['title']);
+  });
+  it('other states are unaffected', async () => {
+    const { archivedEditViolations } = await import('./save-rules.js');
+    expect(archivedEditViolations('closed', ['title'], undefined)).toEqual([]);
+  });
+});

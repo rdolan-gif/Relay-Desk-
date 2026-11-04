@@ -57,7 +57,7 @@ export class SearchService {
             and(
               isNull(accounts.deletedAt),
               scopeSql(accounts.databaseId, crmDatabaseScope(auth.rights)),
-              this.accountsService.searchSql(term),
+              this.accountsService.searchSqlStandalone(term),
             ),
           )
           .orderBy(asc(sql`lower(${accounts.name})`))
