@@ -8,6 +8,7 @@ import {
   NavLink,
   Text,
   Title,
+  useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -57,6 +58,7 @@ function Shell() {
   const { me, can } = useAuth();
   const [opened, { toggle }] = useDisclosure();
   const { toggleColorScheme } = useMantineColorScheme();
+  const scheme = useComputedColorScheme('light');
   const qc = useQueryClient();
   const location = useLocation();
 
@@ -100,8 +102,8 @@ function Shell() {
           {(crmLinks.length > 0 || can('tickets', 'read')) && <GlobalSearch />}
           <Group>
             <Text size="sm">{me!.user.name}</Text>
-            <ActionIcon variant="subtle" onClick={toggleColorScheme} aria-label={t.common.theme}>
-              ◐
+            <ActionIcon variant="default" size="lg" onClick={toggleColorScheme} aria-label={t.common.theme}>
+              {scheme === 'dark' ? '☀' : '☾'}
             </ActionIcon>
           </Group>
         </Group>

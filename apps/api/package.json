@@ -10,7 +10,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:seed": "tsx src/db/seed.ts",
+    "db:setup:support": "tsx src/db/setup-support-team.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.8",

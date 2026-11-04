@@ -100,7 +100,7 @@ export function TicketsPage() {
       key: 'state',
       label: t.tickets.state,
       render: (r) => (
-        <Badge color={STATE_COLOURS[r.state]} variant="light">
+        <Badge color={STATE_COLOURS[r.state]} variant="light" style={{ minWidth: 'max-content' }}>
           {t.tickets.states[r.state]}
         </Badge>
       ),
@@ -111,7 +111,7 @@ export function TicketsPage() {
       label: t.tickets.priority,
       sortKey: 'priority',
       render: (r) => (
-        <Badge color={PRIORITY_COLOURS[r.priority]} variant="dot">
+        <Badge color={PRIORITY_COLOURS[r.priority]} variant="dot" style={{ minWidth: 'max-content' }}>
           {t.tickets.priorities[r.priority]}
         </Badge>
       ),

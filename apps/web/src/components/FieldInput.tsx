@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { sortedOptions, type CustomFieldDef, type FieldPlacement } from '@relay-desk/domain';
 import { api } from '../api';
+import { DateField, DateTimeField } from './DateFields';
 import { qs, useUserDirectory } from '../crm/hooks';
 import type { Contact, Page } from '../crm/types';
 
@@ -46,18 +47,9 @@ export function FieldInput({ def, placement, value, onChange, readOnly, error }:
         />
       );
     case 'date':
-      return (
-        <TextInput {...common} type="date" value={str} onChange={(e) => onChange(e.currentTarget.value || null)} />
-      );
+      return <DateField {...common} value={str || null} onChange={onChange} />;
     case 'datetime':
-      return (
-        <TextInput
-          {...common}
-          type="datetime-local"
-          value={str ? toLocalInput(str) : ''}
-          onChange={(e) => onChange(e.currentTarget.value ? new Date(e.currentTarget.value).toISOString() : null)}
-        />
-      );
+      return <DateTimeField {...common} value={str || null} onChange={onChange} />;
     case 'select':
       return <Select {...common} data={options} value={str || null} onChange={(v) => onChange(v)} clearable />;
     case 'multiselect':
@@ -104,12 +96,6 @@ export function FieldInput({ def, placement, value, onChange, readOnly, error }:
     default:
       return <TextInput {...common} value={str} onChange={(e) => onChange(e.currentTarget.value)} />;
   }
-}
-
-function toLocalInput(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 type PickerProps = {

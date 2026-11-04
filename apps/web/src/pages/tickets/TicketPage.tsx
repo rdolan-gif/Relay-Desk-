@@ -29,6 +29,7 @@ import { formatPhoneForDisplay, type Priority, type TicketState } from '@relay-d
 import { ApiError, api } from '../../api';
 import { useAuth } from '../../auth';
 import { CopyValue } from '../../components/CopyValue';
+import { DateTimeField } from '../../components/DateFields';
 import { DynamicForm } from '../../components/DynamicForm';
 import { ContactPicker, UserPicker } from '../../components/FieldInput';
 import { HistoryPanel } from '../../components/HistoryPanel';
@@ -59,15 +60,6 @@ interface Draft {
 
 const LAYOUT_KEY = 'rd.ticket.layout';
 const SPANS: Record<string, [number, number]> = { '2:1': [8, 4], '1:1': [6, 6], '1:2': [4, 8] };
-
-/** datetime-local <-> ISO */
-const toLocal = (iso: string | null) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-};
-const fromLocal = (v: string) => (v ? new Date(v).toISOString() : null);
 
 function draftOf(tk: TicketDetail): Draft {
   return {
@@ -291,21 +283,19 @@ export function TicketPage() {
         error={fieldErrors.errors.userId}
       />
       <Group grow>
-        <TextInput
+        <DateTimeField
           label={t.tickets.deadline}
-          type="datetime-local"
-          value={toLocal(shown.deadline)}
+          value={shown.deadline}
           disabled={readOnly}
-          onChange={(e) => set({ deadline: fromLocal(e.currentTarget.value) })}
+          onChange={(deadline) => set({ deadline })}
         />
-        <TextInput
+        <DateTimeField
           label={t.tickets.reopenAt}
-          type="datetime-local"
-          value={toLocal(shown.reopenAt)}
+          value={shown.reopenAt}
           disabled={readOnly}
           required={shown.state === 'waiting' && category?.waitingRequiresReopen}
           error={fieldErrors.errors.reopenAt}
-          onChange={(e) => set({ reopenAt: fromLocal(e.currentTarget.value) })}
+          onChange={(reopenAt) => set({ reopenAt })}
         />
       </Group>
       <MultiSelect
