@@ -26,3 +26,5 @@ export * from './sla/working-time.js';
 export * from './sla/bank-holidays.js';
 export * from './sla/sla.js';
 export * from './sla/distribution.js';
+export * from './notifications/notifications.js';
+export * from './macros/macros.js';

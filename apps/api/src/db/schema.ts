@@ -29,6 +29,8 @@ import type {
   RoutingCondition,
   Priority,
   StatusRequired,
+  MacroAction,
+  MacroPosition,
   SlaTarget,
   SlaUnit,
   TicketState,
@@ -74,6 +76,7 @@ export const rightsProfiles = pgTable(
     allCategories: boolean('all_categories').notNull().default(false),
     allTicketViews: boolean('all_ticket_views').notNull().default(false),
     allMailboxes: boolean('all_mailboxes').notNull().default(false),
+    allMacros: boolean('all_macros').notNull().default(false),
     ...timestamps,
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -106,6 +109,8 @@ export const users = pgTable(
     signature: text('signature'),
     /** When distribution last gave this user a ticket (spec 9 tie-break). */
     lastDistributedAt: timestamp('last_distributed_at', { withTimezone: true }),
+    /** Where notification emails go (spec 13); null = their sign-in email. */
+    notificationEmail: text('notification_email'),
     ...timestamps,
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -690,6 +695,8 @@ export const mailboxQueues = pgTable(
       .references(() => categories.id),
     headerThreading: boolean('header_threading').notNull().default(true),
     active: boolean('active').notNull().default(true),
+    /** Staff notification emails are sent from this mailbox (spec 13). */
+    sendsNotifications: boolean('sends_notifications').notNull().default(false),
     autoResponseEnabled: boolean('auto_response_enabled').notNull().default(false),
     autoResponseNewOnly: boolean('auto_response_new_only').notNull().default(true),
     autoResponseTemplateId: uuid('auto_response_template_id'),
@@ -883,4 +890,87 @@ export const queueLogins = pgTable(
     since: timestamp('since', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.queueId] })],
+);
+
+/** In-app notification centre (spec 13). */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** assigned, mention, activity, sla_warning, sla_breached, email_failed, job_done */
+    kind: text('kind').notNull(),
+    ticketId: integer('ticket_id'),
+    actorId: uuid('actor_id').references(() => users.id),
+    title: text('title').notNull(),
+    body: text('body').notNull().default(''),
+    /** Stops repeats, e.g. one SLA warning per deadline. */
+    dedupeKey: text('dedupe_key'),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('notifications_user_idx').on(t.userId, t.createdAt),
+    uniqueIndex('notifications_dedupe_uq')
+      .on(t.userId, t.dedupeKey)
+      .where(sql`dedupe_key IS NOT NULL`),
+  ],
+);
+
+/** Email notification rules per category, per user (spec 13). */
+export const notificationRules = pgTable(
+  'notification_rules',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    categoryId: uuid('category_id')
+      .notNull()
+      .references(() => categories.id, { onDelete: 'cascade' }),
+    owner: boolean('owner').notNull().default(false),
+    followed: boolean('followed').notNull().default(false),
+    isNew: boolean('is_new').notNull().default(false),
+    activity: boolean('activity').notNull().default(false),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.categoryId] })],
+);
+
+/** Macros (spec 10). */
+export const macros = pgTable('macros', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  description: text('description').notNull().default(''),
+  colour: text('colour').notNull().default('blue'),
+  position: text('position').$type<MacroPosition>().notNull().default('button'),
+  actions: jsonb('actions').$type<MacroAction[]>().notNull().default([]),
+  ...timestamps,
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+});
+
+export const macroCategories = pgTable(
+  'macro_categories',
+  {
+    macroId: uuid('macro_id')
+      .notNull()
+      .references(() => macros.id, { onDelete: 'cascade' }),
+    categoryId: uuid('category_id')
+      .notNull()
+      .references(() => categories.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.macroId, t.categoryId] })],
+);
+
+export const rightsProfileMacros = pgTable(
+  'rights_profile_macros',
+  {
+    rightsProfileId: uuid('rights_profile_id')
+      .notNull()
+      .references(() => rightsProfiles.id, { onDelete: 'cascade' }),
+    macroId: uuid('macro_id')
+      .notNull()
+      .references(() => macros.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.rightsProfileId, t.macroId] })],
 );

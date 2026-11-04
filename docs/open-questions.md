@@ -81,6 +81,19 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 | Q-P2-15 | Date-time inputs              | Use the browser's own picker, which follows the computer's regional settings (DD/MM/YYYY on UK-configured machines).                       | Assumed  |
 | Q-P2-16 | "Sessions view" in History    | Comes with time tracking (spec 6.5, [SHOULD]); "Hide activities" is built.                                                                 | Assumed  |
 
+## Phase 5 decisions
+
+| #      | Topic                     | Decision                                                                                                                                                                                                  | Status   |
+| ------ | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Q-P5-1 | Real-time push            | Server-Sent Events over the normal session instead of WebSocket (spec 18): one-way push is all the bell needs, it passes through ordinary web servers and needs no extra package.                         | Assumed  |
+| Q-P5-2 | Presence                  | Each open ticket sends a heartbeat every 10 seconds; viewers drop off after 30 seconds. Editors (unsaved changes, a comment or an email being written) are shown in amber.                                | Assumed  |
+| Q-P5-3 | Notification emails       | Sent through the Gmail API from the one mailbox marked "Send staff notification emails" (none by default, so emails are off until chosen). They are marked automatic so no inbox turns them into tickets. | **Open** |
+| Q-P5-4 | Mentions by email         | Mentions are in-app only; email follows the four rules in spec 13.                                                                                                                                        | Assumed  |
+| Q-P5-5 | SLA notices               | To the owner and followers; warning `SLA_WARNING_MINUTES` (30) working minutes before, once per deadline; breaches older than a day are not announced (avoids a flood on first start).                    | Assumed  |
+| Q-P5-6 | Macro rights              | Existing rights profiles may run every macro (macros are new); new profiles start with none. Set in Rights profiles › "Macros they can run".                                                              | Assumed  |
+| Q-P5-7 | Macros and closing (O-15) | A macro may close a ticket, because a person clicks it; nothing closes tickets automatically.                                                                                                             | Assumed  |
+| Q-P5-8 | Insert template           | Opens a reply to the last incoming email (or a new email) with the template filled in; the macro carries on with its next action.                                                                         | Assumed  |
+
 ## Phase 4 decisions
 
 | #       | Topic                   | Decision                                                                                                                                                                    | Status   |

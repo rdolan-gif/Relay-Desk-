@@ -15,7 +15,8 @@ Progress and the test for each acceptance criterion: `docs/progress.md`.
 - Phase 2 (tickets without email): **done**
 - Phase 3 (email channel, Gmail API): **done** — Google setup in `docs/setup/gmail.md`
 - Phase 4 (SLA and distribution; reply targets by enquiry type): **done**
-- Next: Phase 5 (notifications and macros)
+- Phase 5 (notifications, presence, macros): **done**
+- Next: Phase 6 (search, bulk, GDPR)
 
 ## Stack
 
@@ -97,5 +98,9 @@ Integration tests drop and recreate the schema of `TEST_DATABASE_URL`
   idempotent. Outcome flags are frozen once set. A deadline is manual only when a person changed it.
 - **Distribution**: tickets from a mailbox are `distributable`; call `DistributionService.run(categoryIds)`
   after commit when an Open count can drop or someone becomes Ready for email.
+- **Notifications**: after commit, call `NotificationsService.ticketEvent(id, { type, actorId })`
+  (created / assigned / moved / activity); it never throws and never tells the actor. New tables
+  must also be added to the TRUNCATE list in `apps/api/test/helpers.ts`.
+- **Owner O-15**: the system never closes tickets on its own (no auto-close in rules or email).
 - **Filters**: validate with domain `validateConditions`, translate with `filterSql`; keep
   `matchesConditions` (domain) and `conditionToSql` (API) in agreement.

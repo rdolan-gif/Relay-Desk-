@@ -10,6 +10,49 @@
 | Company › Branch › Branch number with phones, emails and addresses; branch card on tickets; branch and company ticket lists | `packages/domain/src/crm/accounts.test.ts`, `apps/api/test/branches.test.ts`           |
 | Support team structure (categories, rights, views)                                                                          | `pnpm db:setup:support` (add `-- --demo` for demo users and data)                      |
 
+## Phase 5 — Notifications and macros ✅
+
+Scope (spec 20): notification rules, in-app centre, real-time presence, optimistic locking,
+macros.
+
+**Done when:** a _Waiting +2 days, Back_ macro sets the fields, saves and returns to the list
+in one click.
+
+| Criterion / rule                                                                                                                                                                                              | Test                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **"Waiting +2 days, Back" sets the fields, saves and returns to the list in one click**                                                                                                                       | `e2e/tests/phase5.spec.ts`, `apps/api/test/phase5-acceptance.test.ts`, `packages/domain/src/notify-macros.test.ts` |
+| Macro actions: category, user (replace or not, @me), state, status add/replace, priority, re-open (hours, days, working days, date), custom field, follower, template, URL, Save / Don't save / Back / Delete | `notify-macros.test.ts`                                                                                            |
+| Macros show only where enabled for the category and in the user's rights; a macro's user wins on close                                                                                                        | `phase5-acceptance.test.ts`                                                                                        |
+| Macros validated (Back/Delete last, http(s) URLs), cloned, admin-only settings                                                                                                                                | `notify-macros.test.ts`, `phase5-acceptance.test.ts`                                                               |
+| In-app: assignment, activity on my/followed tickets, @mentions (also new ones added while editing)                                                                                                            | `notify-macros.test.ts`, `phase5-acceptance.test.ts`                                                               |
+| Never notify the person who caused the event; never about a ticket you cannot see                                                                                                                             | `notify-macros.test.ts`, `phase5-acceptance.test.ts`                                                               |
+| Email rules per category per user: Owner, Followed, New, Edit/new activity                                                                                                                                    | `notify-macros.test.ts`, `phase5-acceptance.test.ts`                                                               |
+| SLA about to breach (30 working minutes) and breached, once each; failed email sends                                                                                                                          | `notify-macros.test.ts`, `phase5-acceptance.test.ts`                                                               |
+| Bell with unread count, mark read / all read, click opens the ticket, real-time push                                                                                                                          | `phase5-acceptance.test.ts`, `e2e/tests/phase5.spec.ts`                                                            |
+| Presence: other viewers and editors on a ticket                                                                                                                                                               | `phase5-acceptance.test.ts`                                                                                        |
+| Optimistic locking (built in Phase 2)                                                                                                                                                                         | `tickets.test.ts`                                                                                                  |
+
+What exists:
+
+- Domain: `notifications/notifications.ts` (who is told, SLA notices), `macros/macros.ts`
+  (actions, working days, URL placeholders, validation).
+- API: `/api/me/notifications` (list, read, read-all), `/api/me/events` (Server-Sent Events),
+  `/api/me/notification-rules`, `/api/tickets/:id/presence` (+ `leave`),
+  `/api/settings/macros` (CRUD, clone), `/api/tickets/:id/macros`; `PATCH /api/tickets/:id`
+  takes `macroId` (save source "macro"); macro rights on rights profiles; "Send staff
+  notification emails" on one mailbox; the minute job sends SLA notices.
+- Web: bell with live updates and toasts, presence avatars on tickets, macro buttons and
+  Actions-menu entries, Settings › Macros (drag-and-drop action blocks), email notification
+  choices in My account, macros on rights profiles, notification mailbox option.
+- Seed: "Waiting +2 days" macro on Support and Billing. `pnpm db:setup:support` adds "Waiting
+  for customer (2 working days)" on every Ricoman category.
+
+Deferred, deliberately:
+
+- Undo for the last macro run (spec 19) is Phase 8 (QOL).
+- "Import/export finished" notifications arrive with import/export (Phase 6).
+- Daily digest is [LATER].
+
 ## Phase 4 — SLA and distribution ✅
 
 Scope (spec 20): SLA definitions, time groups, account override, deadline maths, Waiting

@@ -3,7 +3,15 @@ import { fullAccessProfile } from '@relay-desk/domain';
 import { PasswordService } from '../auth/password.service';
 import { SlaService } from '../sla/sla.service';
 import { createDb, createPool, type Db } from './db';
-import { DEFAULT_SEED_PASSWORD, enquiryTypeField, seed, seedRoutingRules, seedSla, seedTimeGroup } from './seed';
+import {
+  DEFAULT_SEED_PASSWORD,
+  enquiryTypeField,
+  seed,
+  seedMacro,
+  seedRoutingRules,
+  seedSla,
+  seedTimeGroup,
+} from './seed';
 import type { Address } from '@relay-desk/domain';
 import {
   accessProfiles,
@@ -182,6 +190,7 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
         editAllRightsProfiles: admin,
         allCrmDatabases: true,
         allCrmRecordTypes: true,
+        allMacros: true,
       })
       .returning();
     const visible = [...SHARED, ...LABELS, ...(personal ? [personal] : [])];
@@ -241,6 +250,21 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   }
   // Enquiry type from the subject/body (owner O-11). No automatic filtering (owner O-12).
   await seedRoutingRules(db, { enquiryType, includeNoReply: false });
+  // A starter macro (spec 10); admins can change or add more in Settings › Macros.
+  await seedMacro(
+    db,
+    'Waiting for customer (2 working days)',
+    Object.values(cat),
+    [
+      { type: 'set_state', state: 'waiting' },
+      { type: 'set_reopen', mode: 'relative', amount: 2, unit: 'working_days' },
+      { type: 'back' },
+    ],
+    {
+      description: 'Puts the ticket in Waiting, re-opens it in 2 working days, and goes back to the list.',
+      colour: 'amber',
+    },
+  );
 
   if (opts.demo) await demoData(db, rp, cat, views, opts.password ?? DEFAULT_SEED_PASSWORD, enquiryType);
   return { categories: cat, views, rightsProfiles: rp, mailboxes: boxes };

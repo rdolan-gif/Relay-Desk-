@@ -56,10 +56,11 @@ const ticketFields = {
 };
 
 export const ticketCreateSchema = z.object(ticketFields);
-export const ticketUpdateSchema = z
-  .object(ticketFields)
-  .partial()
-  .extend({ version: z.number().int().positive().optional() });
+export const ticketUpdateSchema = z.object(ticketFields).partial().extend({
+  version: z.number().int().positive().optional(),
+  /** Saved by this macro (spec 10): the macro's user wins over auto-fill on close. */
+  macroId: z.string().uuid().optional(),
+});
 
 export const bulkEditSchema = z.object({
   ticketIds: z.array(z.number().int().positive()).min(1).max(200),

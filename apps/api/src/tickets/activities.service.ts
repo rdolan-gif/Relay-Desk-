@@ -4,6 +4,7 @@ import { automaticState, followersToAdd, newMentions } from '@relay-desk/domain'
 import type { AuthContext } from '../common/request-context';
 import { DB, type Db } from '../db/db';
 import { activities, attachments, emailMessages, tickets, users } from '../db/schema';
+import { NotificationsService } from '../notifications/notifications.service';
 import { HistoryService } from '../history/history.service';
 import { htmlToText, sanitizeRich } from './sanitize';
 import { TicketSettingsService } from './ticket-settings.service';
@@ -25,6 +26,7 @@ export class ActivitiesService {
     @Inject(TicketsService) private readonly ticketsService: TicketsService,
     @Inject(TicketSettingsService) private readonly settings: TicketSettingsService,
     @Inject(HistoryService) private readonly history: HistoryService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
   async list(auth: AuthContext, ticketId: number) {
@@ -112,6 +114,11 @@ export class ActivitiesService {
       await tx.update(tickets).set({ lastActivityAt: new Date() }).where(eq(tickets.id, ticketId));
       return row!.id;
     });
+    await this.notifications.ticketEvent(
+      ticketId,
+      { type: 'activity', actorId: auth.user.id, mentionedIds: mentions },
+      'New comment',
+    );
     return this.getOne(id);
   }
 
@@ -142,6 +149,7 @@ export class ActivitiesService {
         followersToAdd({ existing, authorId: auth.user.id, mentionedIds: added, isInternalUser: () => true }),
       );
     });
+    await this.notifications.mentioned(ticketId, auth.user.id, added);
     return { ...(await this.getOne(activityId)), newMentionUserIds: added };
   }
 

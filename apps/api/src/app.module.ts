@@ -68,6 +68,12 @@ import { DistributionService } from './sla/distribution.service';
 import { QueueLoginController, SlaController, SlaOptionsController, TimeGroupsController } from './sla/sla.controller';
 import { SlaService } from './sla/sla.service';
 import { SlaSettingsService } from './sla/sla-settings.service';
+import { MacrosController, TicketMacrosController } from './macros/macros.controller';
+import { MacrosService } from './macros/macros.service';
+import { NotificationsController, PresenceController } from './notifications/notifications.controller';
+import { NotificationsService } from './notifications/notifications.service';
+import { PresenceService } from './notifications/presence.service';
+import { RealtimeService } from './notifications/realtime.service';
 
 class PoolCloser implements OnApplicationShutdown {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
@@ -118,8 +124,16 @@ export class AppModule {
         TimeGroupsController,
         QueueLoginController,
         SlaOptionsController,
+        NotificationsController,
+        PresenceController,
+        MacrosController,
+        TicketMacrosController,
       ],
       providers: [
+        RealtimeService,
+        PresenceService,
+        NotificationsService,
+        MacrosService,
         SlaService,
         SlaSettingsService,
         DistributionService,

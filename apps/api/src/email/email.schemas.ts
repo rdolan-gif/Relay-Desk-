@@ -10,6 +10,7 @@ export const mailboxSchema = z.object({
   headerThreading: z.boolean().default(true),
   active: z.boolean().default(true),
   autoResponseEnabled: z.boolean().default(false),
+  sendsNotifications: z.boolean().default(false),
   autoResponseNewOnly: z.boolean().default(true),
   autoResponseTemplateId: z.string().uuid().nullable().default(null),
   defaultBodyTemplateId: z.string().uuid().nullable().default(null),

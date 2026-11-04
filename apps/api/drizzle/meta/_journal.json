@@ -71,6 +71,13 @@
       "when": 1793794996726,
       "tag": "0009_distribution_switch",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793795404277,
+      "tag": "0010_notifications_macros",
+      "breakpoints": true
     }
   ]
 }

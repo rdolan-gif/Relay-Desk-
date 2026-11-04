@@ -50,6 +50,7 @@ const rightsSchema = z.object({
     .default([]),
   ticketViews: z.union([z.literal('all'), idList]).default([]),
   mailboxes: z.union([z.literal('all'), idList]).default([]),
+  macros: z.union([z.literal('all'), idList]).default([]),
 });
 
 @ApiTags('settings')

@@ -15,6 +15,7 @@ import {
 import type { AuthContext } from '../common/request-context';
 import { DB, type Db, type DbOrTx } from '../db/db';
 import { activities, attachments, contacts, emailMessages, tickets } from '../db/schema';
+import { NotificationsService } from '../notifications/notifications.service';
 import { StorageService } from '../storage/storage.service';
 import { htmlToText } from '../tickets/sanitize';
 import { TicketsService } from '../tickets/tickets.service';
@@ -50,6 +51,7 @@ export class OutboundService {
     @Inject(StorageService) private readonly storage: StorageService,
     @Inject(TicketsService) private readonly tickets: TicketsService,
     @Inject(RoutingRulesService) private readonly rules: RoutingRulesService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
   async send(auth: AuthContext, input: SendInput) {
@@ -83,7 +85,7 @@ export class OutboundService {
       ticketId = await this.createTicketForNewEmail(auth, queue, input.subject, to, cc, input.bodyHtml);
     }
     const files = await this.attachmentsFor(auth, input.attachmentIds ?? [], ticketId);
-    return this.deliver({
+    const sent = await this.deliver({
       queue,
       ticketId,
       authorId: auth.user.id,
@@ -97,6 +99,15 @@ export class OutboundService {
       files,
       isAutomatic: false,
     });
+    if (sent.status === 'failed')
+      await this.notifications.emailFailed(auth.user.id, ticketId, sent.error ?? 'Unknown error');
+    else
+      await this.notifications.ticketEvent(
+        ticketId,
+        { type: 'activity', actorId: auth.user.id },
+        `Email sent to ${to.join(', ')}`,
+      );
+    return sent;
   }
 
   /** System send for auto-responses: marked automatic so it never counts as a reply (spec 8). */

@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne } from 'drizzle-orm';
 import { canUseMailbox, diffFields, normaliseMailAddress } from '@relay-desk/domain';
 import { AuditService } from '../audit/audit.service';
 import { SECRET_BOX, SecretBox } from '../common/crypto';
@@ -19,6 +19,7 @@ export interface MailboxInput {
   active: boolean;
   autoResponseEnabled: boolean;
   autoResponseNewOnly: boolean;
+  sendsNotifications?: boolean;
   autoResponseTemplateId: string | null;
   defaultBodyTemplateId: string | null;
   crmDatabaseIds: string[];
@@ -77,6 +78,7 @@ export class MailboxesService {
     try {
       return await this.db.transaction(async (tx) => {
         const { crmDatabaseIds, ...values } = input;
+        if (values.sendsNotifications) await tx.update(mailboxQueues).set({ sendsNotifications: false });
         const [row] = await tx
           .insert(mailboxQueues)
           .values({ ...values, address: normaliseMailAddress(values.address) })
@@ -121,6 +123,9 @@ export class MailboxesService {
     return this.db.transaction(async (tx) => {
       const { crmDatabaseIds, ...values } = input;
       const addressChanged = address !== before.address;
+      // Only one mailbox sends staff notifications.
+      if (values.sendsNotifications)
+        await tx.update(mailboxQueues).set({ sendsNotifications: false }).where(ne(mailboxQueues.id, id));
       const [row] = await tx
         .update(mailboxQueues)
         .set({
@@ -287,6 +292,7 @@ export function publicMailbox(r: MailboxRow, crmDatabaseIds: string[]) {
     headerThreading: r.headerThreading,
     active: r.active,
     autoResponseEnabled: r.autoResponseEnabled,
+    sendsNotifications: r.sendsNotifications,
     autoResponseNewOnly: r.autoResponseNewOnly,
     autoResponseTemplateId: r.autoResponseTemplateId,
     defaultBodyTemplateId: r.defaultBodyTemplateId,

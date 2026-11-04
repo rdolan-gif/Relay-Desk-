@@ -27,6 +27,8 @@ const schema = z.object({
   STORAGE_DIR: z.string().default('./data/storage'),
   /** How often each mailbox is checked for new mail. */
   MAIL_POLL_SECONDS: z.coerce.number().int().min(15).default(60),
+  /** "SLA about to breach" notice, in working minutes before the deadline (spec 13). */
+  SLA_WARNING_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),
 });
 
 export type AppConfig = z.infer<typeof schema>;

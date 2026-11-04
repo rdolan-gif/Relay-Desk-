@@ -26,6 +26,11 @@ test('an agent can mark themselves Ready for email', async ({ page }) => {
   await login(page, 'agent@relaydesk.local');
   await page.getByRole('button', { name: 'Ready for email' }).click();
   const box = page.getByRole('checkbox', { name: /support@relaydesk.local/ });
+  // Ready stays on between sessions (owner O-16), so start from "not ready".
+  if (await box.isChecked()) {
+    await box.click();
+    await expect(box).not.toBeChecked();
+  }
   await box.click();
   await expect(box).toBeChecked();
   await expect(page.getByRole('button', { name: 'Ready for email' })).toHaveText(/^Ready/);

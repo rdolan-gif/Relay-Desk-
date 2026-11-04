@@ -15,6 +15,12 @@ export interface TicketRights {
   ticketViews: 'all' | readonly string[];
   /** Mailboxes the user can send from and is "logged in to" for distribution (spec 4). */
   mailboxes: 'all' | readonly string[];
+  /** Macros the user may run (spec 10, "Availability"). */
+  macros: 'all' | readonly string[];
+}
+
+export function canUseMacro(rights: TicketRights, macroId: string): boolean {
+  return rights.macros === 'all' || rights.macros.includes(macroId);
 }
 
 export function canUseMailbox(rights: TicketRights, queueId: string): boolean {

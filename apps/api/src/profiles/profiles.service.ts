@@ -22,6 +22,7 @@ import {
   rightsProfileCategories,
   rightsProfileTicketViews,
   rightsProfileMailboxes,
+  rightsProfileMacros,
   rightsProfileCrmDatabases,
   rightsProfileCrmRecordTypes,
   rightsProfileEditableAccessProfiles,
@@ -51,6 +52,7 @@ export interface RightsProfileInput {
   categories: 'all' | { categoryId: string; access: boolean; distribute: boolean; distributionLimit: number | null }[];
   ticketViews: 'all' | string[];
   mailboxes: 'all' | string[];
+  macros: 'all' | string[];
 }
 
 const forbidden = (message: string, reason: string) => new ForbiddenException({ message, reason });
@@ -213,6 +215,7 @@ export class ProfilesService {
             allCategories: input.categories === 'all',
             allTicketViews: input.ticketViews === 'all',
             allMailboxes: input.mailboxes === 'all',
+            allMacros: input.macros === 'all',
           })
           .returning();
         await this.writeRightsLinks(tx, row!.id, input);
@@ -252,6 +255,7 @@ export class ProfilesService {
             allCategories: input.categories === 'all',
             allTicketViews: input.ticketViews === 'all',
             allMailboxes: input.mailboxes === 'all',
+            allMacros: input.macros === 'all',
             updatedAt: new Date(),
           })
           .where(eq(rightsProfiles.id, id))
@@ -339,6 +343,7 @@ export class ProfilesService {
     );
     checkScope('team views', auth.ticketRights.ticketViews, input.ticketViews);
     checkScope('mailboxes', auth.ticketRights.mailboxes, input.mailboxes);
+    checkScope('macros', auth.ticketRights.macros, input.macros);
     await this.assertExist(
       categories,
       input.categories === 'all' ? 'all' : input.categories.map((c) => c.categoryId),
@@ -387,6 +392,12 @@ export class ProfilesService {
       await tx.delete(rightsProfileCategories).where(eq(rightsProfileCategories.rightsProfileId, id));
       await tx.delete(rightsProfileTicketViews).where(eq(rightsProfileTicketViews.rightsProfileId, id));
       await tx.delete(rightsProfileMailboxes).where(eq(rightsProfileMailboxes.rightsProfileId, id));
+      await tx.delete(rightsProfileMacros).where(eq(rightsProfileMacros.rightsProfileId, id));
+    }
+    if (input.macros !== 'all' && input.macros.length) {
+      await tx
+        .insert(rightsProfileMacros)
+        .values([...new Set(input.macros)].map((macroId) => ({ rightsProfileId: id, macroId })));
     }
     if (input.mailboxes !== 'all' && input.mailboxes.length) {
       await tx
@@ -458,6 +469,7 @@ export class ProfilesService {
           : [...tickets.categories].sort((a, b) => a.categoryId.localeCompare(b.categoryId)),
       ticketViews: tickets.ticketViews === 'all' ? 'all' : [...tickets.ticketViews].sort(),
       mailboxes: tickets.mailboxes === 'all' ? 'all' : [...tickets.mailboxes].sort(),
+      macros: tickets.macros === 'all' ? 'all' : [...tickets.macros].sort(),
     };
   }
 }

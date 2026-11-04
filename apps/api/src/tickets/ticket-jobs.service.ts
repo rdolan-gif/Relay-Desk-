@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import { CONFIG, type AppConfig } from '../config/config';
+import { NotificationsService } from '../notifications/notifications.service';
 import { DistributionService } from '../sla/distribution.service';
 import { SlaService } from '../sla/sla.service';
 import { TicketsService } from './tickets.service';
@@ -20,6 +21,7 @@ export class TicketJobsService implements OnModuleInit, OnApplicationShutdown {
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(SlaService) private readonly sla: SlaService,
     @Inject(DistributionService) private readonly distribution: DistributionService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
   onModuleInit() {
@@ -38,6 +40,7 @@ export class TicketJobsService implements OnModuleInit, OnApplicationShutdown {
       const decided = await this.sla.decideDue(now);
       // Safety net for distribution (spec 9); runs are cheap when there is no backlog.
       const assigned = await this.distribution.run(undefined, now);
+      await this.notifications.slaSweep(now);
       if (reopened.length || archived.length || assigned.length)
         this.log.log(
           `reopened ${reopened.length}, archived ${archived.length}, distributed ${assigned.length}, SLA checked ${decided}`,

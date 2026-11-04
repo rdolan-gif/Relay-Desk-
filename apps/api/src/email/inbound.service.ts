@@ -27,6 +27,7 @@ import {
   mailboxQueues,
   tickets,
 } from '../db/schema';
+import { NotificationsService } from '../notifications/notifications.service';
 import { StorageService } from '../storage/storage.service';
 import { TicketsService } from '../tickets/tickets.service';
 import { sanitizeEmailHtml } from './email-html';
@@ -66,6 +67,7 @@ export class InboundService {
     @Inject(RoutingRulesService) private readonly rules: RoutingRulesService,
     @Inject(TemplatesService) private readonly templates: TemplatesService,
     @Inject(OutboundService) private readonly outbound: OutboundService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
   /** Checks every active, connected mailbox once. */
@@ -289,7 +291,12 @@ export class InboundService {
         autoResponded = sent.status === 'sent';
       }
     }
-    // Hand the new ticket to an agent, or leave it in the backlog (spec 9).
+    // Tell people (spec 13), then hand the new ticket to an agent or leave it in the backlog (spec 9).
+    await this.notifications.ticketEvent(
+      result.ticketId,
+      { type: result.created ? 'created' : 'activity', actorId: null },
+      `Email from ${from.address}`,
+    );
     if (result.created) await this.tickets.distributeTicket(result.ticketId);
     return {
       outcome: result.created ? 'created' : 'appended',

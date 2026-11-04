@@ -5,6 +5,7 @@ import { PermissionsService } from '../auth/permissions.service';
 import type { AuthContext } from '../common/request-context';
 import { DB, type Db, type DbOrTx } from '../db/db';
 import { mailboxQueues, queueLogins, tickets, users } from '../db/schema';
+import { NotificationsService } from '../notifications/notifications.service';
 import { HistoryService } from '../history/history.service';
 
 /**
@@ -21,6 +22,7 @@ export class DistributionService {
     @Inject(DB) private readonly db: Db,
     @Inject(PermissionsService) private readonly permissions: PermissionsService,
     @Inject(HistoryService) private readonly history: HistoryService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
   /** Categories with backlog tickets. */
@@ -48,7 +50,9 @@ export class DistributionService {
     const assigned: { ticketId: number; userId: string }[] = [];
     for (const categoryId of ids) {
       try {
-        assigned.push(...(await this.runCategory(categoryId, now)));
+        const done = await this.runCategory(categoryId, now);
+        for (const a of done) await this.notifications.ticketEvent(a.ticketId, { type: 'assigned', actorId: null });
+        assigned.push(...done);
       } catch (err) {
         this.log.error(`Distribution failed for category ${categoryId}: ${(err as Error).message}`);
       }

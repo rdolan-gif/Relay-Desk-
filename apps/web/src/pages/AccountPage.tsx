@@ -16,15 +16,18 @@ import QRCode from 'qrcode';
 import { useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import { NotificationRulesSection } from '../components/NotificationRules';
 import { formatDateTime } from '../format';
 import { t } from '../i18n/en-GB';
 import { notifyError, notifyOk } from '../notify';
 
 export function AccountPage() {
+  const { can } = useAuth();
   return (
-    <Stack maw={560}>
+    <Stack maw={720}>
       <Title order={2}>{t.account.title}</Title>
       <SignatureSection />
+      {can('tickets', 'read') && <NotificationRulesSection />}
       <PasswordSection />
       <TotpSection />
       <ApiTokenSection />

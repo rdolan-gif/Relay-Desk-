@@ -34,6 +34,7 @@ const EMPTY: Draft = {
   categories: [],
   ticketViews: [],
   mailboxes: [],
+  macros: [],
 };
 
 function AllOrList(props: {
@@ -73,6 +74,11 @@ export function RightsProfilesPage() {
     queryKey: ['access-profiles'],
     queryFn: () => api<AccessProfileDto[]>('GET', '/settings/access-profiles'),
     enabled: can('settings_access_profiles', 'read'),
+  });
+  const macroList = useQuery({
+    queryKey: ['macros'],
+    queryFn: () => api<{ id: string; title: string }[]>('GET', '/settings/macros'),
+    enabled: can('settings_macros', 'read'),
   });
   const mailboxes = useQuery({
     queryKey: ['my-mailboxes'],
@@ -189,6 +195,12 @@ export function RightsProfilesPage() {
               value={draft.mailboxes}
               options={(mailboxes.data ?? []).map((m) => ({ value: m.id, label: `${m.title} (${m.address})` }))}
               onChange={(v) => setDraft({ ...draft, mailboxes: v })}
+            />
+            <AllOrList
+              label={t.macros.rights}
+              value={draft.macros}
+              options={(macroList.data ?? []).map((m) => ({ value: m.id, label: m.title }))}
+              onChange={(v) => setDraft({ ...draft, macros: v })}
             />
             <AllOrList
               label={t.crmSettings.crmDatabasesRights}

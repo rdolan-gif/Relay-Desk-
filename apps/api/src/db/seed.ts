@@ -6,6 +6,7 @@ import {
   normaliseAccessProfile,
   type AccessProfile,
   type Interval,
+  type MacroAction,
   type SlaTarget,
   type UserType,
 } from '@relay-desk/domain';
@@ -35,6 +36,8 @@ import {
   routingRules,
   slaDefinitions,
   timeGroups,
+  macroCategories,
+  macros,
 } from './schema';
 import type { FieldOption, FieldType, FormLayout } from '@relay-desk/domain';
 
@@ -104,6 +107,7 @@ export async function seed(db: Db, password = process.env.SEED_PASSWORD ?? DEFAU
       allCategories: true,
       allTicketViews: true,
       allMailboxes: true,
+      allMacros: true,
     },
     'Standard agent': {
       userVisibility: 'all' as const,
@@ -113,6 +117,7 @@ export async function seed(db: Db, password = process.env.SEED_PASSWORD ?? DEFAU
       allCrmRecordTypes: true,
       allCategories: false,
       allTicketViews: true,
+      allMacros: true,
     },
   };
   for (const [name, values] of Object.entries(rights)) {
@@ -494,6 +499,16 @@ async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<
     .values({ rightsProfileId: standardAgentRightsId, queueId: mailbox!.id })
     .onConflictDoNothing();
   await seedRoutingRules(db, { doNotReply, enquiryType, includeNoReply: true });
+  const waitingMacro = await seedMacro(
+    db,
+    'Waiting +2 days',
+    [support, billing],
+    [
+      { type: 'set_state', state: 'waiting' },
+      { type: 'set_reopen', mode: 'relative', amount: 2, unit: 'days' },
+      { type: 'back' },
+    ],
+  );
   return {
     statuses: { ...st, fyi },
     categories: { support, billing, intake, doNotReply },
@@ -502,7 +517,35 @@ async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<
     enquiryType,
     officeHours,
     standardSla,
+    waitingMacro,
   };
+}
+
+/** Creates a macro once (by title) for these categories (spec 10). */
+export async function seedMacro(
+  db: Db,
+  title: string,
+  categoryIds: string[],
+  actions: MacroAction[],
+  extra: { description?: string; colour?: string } = {},
+): Promise<string> {
+  const [existing] = await db
+    .select()
+    .from(macros)
+    .where(and(eq(macros.title, title), isNull(macros.deletedAt)));
+  if (existing) return existing.id;
+  const [row] = await db
+    .insert(macros)
+    .values({
+      title,
+      actions,
+      position: 'button',
+      colour: extra.colour ?? 'blue',
+      description: extra.description ?? '',
+    })
+    .returning();
+  await db.insert(macroCategories).values(categoryIds.map((categoryId) => ({ macroId: row!.id, categoryId })));
+  return row!.id;
 }
 
 /** Creates a time group once (by title); England and Wales bank holidays included. */

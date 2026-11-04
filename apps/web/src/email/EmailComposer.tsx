@@ -12,7 +12,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { replyRecipients, replySubject, signatureHtml } from '@relay-desk/domain';
 import { api, apiUpload } from '../api';
 import { useAuth } from '../auth';
@@ -34,12 +34,23 @@ interface Props {
   saveForm?: () => Promise<unknown>;
   onSent: (r: { ticketId: number; status: string }) => void;
   onCancel: () => void;
+  /** Pre-fill with this template (a macro's "Insert template", spec 10). */
+  initialTemplateId?: string | null;
 }
 
 const fmtAddr = (a: { name?: string; address: string }) => (a.name ? `${a.name} <${a.address}>` : a.address);
 
 /** Writes and sends an email from a ticket, or a new email (spec 11.4). */
-export function EmailComposer({ mode, ticket, source, formDirty, saveForm, onSent, onCancel }: Props) {
+export function EmailComposer({
+  mode,
+  ticket,
+  source,
+  formDirty,
+  saveForm,
+  onSent,
+  onCancel,
+  initialTemplateId,
+}: Props) {
   const { me } = useAuth();
   const mailboxes = useQuery({ queryKey: ['my-mailboxes'], queryFn: () => api<MyMailbox[]>('GET', '/mailboxes') });
   const ours = (mailboxes.data ?? []).map((m) => m.address);
@@ -113,6 +124,10 @@ export function EmailComposer({ mode, ticket, source, formDirty, saveForm, onSen
       notifyError(err);
     }
   };
+
+  useEffect(() => {
+    if (initialTemplateId) void insertTemplate(initialTemplateId);
+  }, [initialTemplateId]);
 
   const send = useMutation({
     mutationFn: async () => {

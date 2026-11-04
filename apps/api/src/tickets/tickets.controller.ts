@@ -14,6 +14,7 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
+import { MacrosService } from '../macros/macros.service';
 import { ApiTags } from '@nestjs/swagger';
 import type { z } from 'zod';
 import { checkAccessFlag, checkModuleAccess } from '@relay-desk/domain';
@@ -255,6 +256,7 @@ export class TicketsController {
     @Inject(TicketsService) private readonly tickets: TicketsService,
     @Inject(ActivitiesService) private readonly activities: ActivitiesService,
     @Inject(ViewsService) private readonly views: ViewsService,
+    @Inject(MacrosService) private readonly macros: MacrosService,
   ) {}
 
   @RequireAccess('tickets', 'read')
@@ -316,12 +318,17 @@ export class TicketsController {
 
   @RequireAccess('tickets', 'update')
   @Patch(':id')
-  update(
+  async update(
     @Auth() auth: AuthContext,
     @Param('id', ParseIntPipe) id: number,
     @Body(new ZodPipe(ticketUpdateSchema)) body: z.infer<typeof ticketUpdateSchema>,
   ) {
-    return this.tickets.update(auth, id, body, 'form');
+    const { macroId, ...changes } = body;
+    if (macroId) {
+      await this.macros.assertUsable(auth, id, macroId);
+      return this.tickets.update(auth, id, changes, 'macro');
+    }
+    return this.tickets.update(auth, id, changes, 'form');
   }
 
   @RequireFlag('can_delete_tickets')

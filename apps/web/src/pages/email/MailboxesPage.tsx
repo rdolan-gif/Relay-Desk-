@@ -37,6 +37,7 @@ interface Mailbox {
   active: boolean;
   autoResponseEnabled: boolean;
   autoResponseNewOnly: boolean;
+  sendsNotifications: boolean;
   autoResponseTemplateId: string | null;
   defaultBodyTemplateId: string | null;
   crmDatabaseIds: string[];
@@ -56,6 +57,7 @@ const EMPTY = (categoryId: string): Draft => ({
   active: true,
   autoResponseEnabled: false,
   autoResponseNewOnly: true,
+  sendsNotifications: false,
   autoResponseTemplateId: null,
   defaultBodyTemplateId: null,
   crmDatabaseIds: [],
@@ -265,6 +267,12 @@ export function MailboxesPage() {
               label={t.mailboxes.headerThreading}
               checked={draft.headerThreading}
               onChange={(e) => setDraft({ ...draft, headerThreading: e.currentTarget.checked })}
+            />
+            <Checkbox
+              label={t.mailboxes.sendsNotifications}
+              description={t.mailboxes.sendsNotificationsHelp}
+              checked={draft.sendsNotifications}
+              onChange={(e) => setDraft({ ...draft, sendsNotifications: e.currentTarget.checked })}
             />
             <Checkbox
               label={t.mailboxes.autoResponse}

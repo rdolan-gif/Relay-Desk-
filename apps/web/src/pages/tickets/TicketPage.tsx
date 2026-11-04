@@ -33,6 +33,15 @@ import { DateTimeField } from '../../components/DateFields';
 import { DynamicForm } from '../../components/DynamicForm';
 import { ContactPicker, UserPicker } from '../../components/FieldInput';
 import { SlaIcon } from '../../components/SlaIcon';
+import {
+  applyMacroAction,
+  isFieldAction,
+  renderMacroUrl,
+  type MacroAction,
+  type MacroPosition,
+  type TimeGroup,
+} from '@relay-desk/domain';
+import { PresenceAvatars } from '../../components/PresenceAvatars';
 import { HistoryPanel } from '../../components/HistoryPanel';
 import { RichTextEditor } from '../../components/RichTextEditor';
 import { EmailActivity } from '../../email/EmailActivity';
@@ -59,6 +68,15 @@ interface Draft {
   reopenAt: string | null;
   followerIds: string[];
   customFields: Record<string, unknown>;
+}
+
+interface TicketMacro {
+  id: string;
+  title: string;
+  description: string;
+  colour: string;
+  position: MacroPosition;
+  actions: MacroAction[];
 }
 
 const LAYOUT_KEY = 'rd.ticket.layout';
@@ -114,7 +132,14 @@ export function TicketPage() {
       return '1:1';
     }
   });
-  const [compose, setCompose] = useState<{ mode: ComposeMode; source: Activity | null } | null>(null);
+  const [compose, setCompose] = useState<{ mode: ComposeMode; source: Activity | null; templateId?: string } | null>(
+    null,
+  );
+  const macros = useQuery({
+    queryKey: ['ticket-macros', id, ticket.data?.categoryId],
+    queryFn: () => api<{ macros: TicketMacro[]; timeGroup: TimeGroup | null }>('GET', `/tickets/${id}/macros`),
+    enabled: !isNew && !!ticket.data,
+  });
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [modal, setModal] = useState<
     null | { kind: 'child'; activityId?: string } | { kind: 'merge' } | { kind: 'move'; activityId: string }
@@ -207,6 +232,85 @@ export function TicketPage() {
     mutationFn: (fn: () => Promise<unknown>) => fn(),
     onSuccess: refresh,
     onError: notifyError,
+  });
+
+  /**
+   * Runs a macro (spec 10): field actions change the form in order; Save / Back / Delete,
+   * Insert template and Open URL happen where they appear. A failed save stops the macro.
+   */
+  const runMacro = useMutation({
+    mutationFn: async (m: TicketMacro) => {
+      const tk0 = ticket.data!;
+      let form = { ...draft! };
+      let version = tk0.version;
+      let saved = false;
+      const ctx = { userId: me!.user.id, now: new Date(), timeGroup: macros.data?.timeGroup ?? null };
+      const persist = async () => {
+        const r = await api<TicketDetail>('PATCH', `/tickets/${id}`, {
+          ...form,
+          deadline: form.deadline !== tk0.deadline ? form.deadline : undefined,
+          version,
+          macroId: m.id,
+        });
+        version = r.version;
+        saved = true;
+      };
+      for (const a of m.actions) {
+        if (isFieldAction(a)) {
+          form = applyMacroAction(form, a, ctx) as typeof form;
+          continue;
+        }
+        if (a.type === 'save') await persist();
+        else if (a.type === 'dont_save') setDraft(form);
+        else if (a.type === 'back') {
+          await persist();
+          notifyOk(t.macros.ran(m.title));
+          nav('/tickets');
+          return 'left';
+        } else if (a.type === 'delete') {
+          if (!window.confirm(t.crm.confirmDelete)) return 'stopped';
+          await api('DELETE', `/tickets/${id}`);
+          nav('/tickets');
+          return 'left';
+        } else if (a.type === 'insert_template') {
+          const lastIn = [...(activities.data ?? [])].reverse().find((x) => x.type === 'email' && x.direction === 'in');
+          setCompose(
+            lastIn
+              ? { mode: 'reply', source: lastIn, templateId: a.templateId }
+              : { mode: 'new', source: null, templateId: a.templateId },
+          );
+        } else if (a.type === 'open_url') {
+          const card = tk0.contactCard;
+          window.open(
+            renderMacroUrl(a.url, {
+              id: tk0.id,
+              title: tk0.title,
+              'contact.name': card?.name,
+              'contact.email': card?.emails[0],
+              'account.name': card?.account?.path,
+            }),
+            '_blank',
+            'noopener',
+          );
+        }
+      }
+      if (!saved) setDraft(form);
+      return saved ? 'saved' : 'applied';
+    },
+    onSuccess: async (result, m) => {
+      if (result === 'left') return;
+      if (result === 'saved') {
+        notifyOk(t.macros.ran(m.title));
+        await refresh();
+      }
+    },
+    onError: (err, m) => {
+      if (err instanceof ApiError && err.body.reason === 'version_conflict') setConflict(true);
+      else {
+        fieldErrors.handle(err);
+        notifyError(new Error(t.macros.stopped(m.title)));
+      }
+    },
   });
 
   if (!draft || !meta.data || !crm.data) return <Text>{t.common.loading}</Text>;
@@ -414,6 +518,7 @@ export function TicketPage() {
                   </Badge>
                 )}
                 {tk?.sla?.indicator && <SlaIcon sla={tk.sla} deadline={tk.deadline} closedAt={tk.closedAt} />}
+                {tk && <PresenceAvatars ticketId={tk.id} editing={dirty || hasComment || !!compose} />}
               </>
             )}
           </Group>
@@ -471,6 +576,21 @@ export function TicketPage() {
                   {t.email.fyi}
                 </Button>
               )}
+              {!readOnly &&
+                macros.data?.macros
+                  .filter((m) => m.position === 'button')
+                  .map((m) => (
+                    <Tooltip key={m.id} label={m.description || m.title} disabled={!m.description} withArrow>
+                      <Button
+                        color={m.colour}
+                        variant="light"
+                        loading={runMacro.isPending && runMacro.variables?.id === m.id}
+                        onClick={() => runMacro.mutate(m)}
+                      >
+                        {m.title}
+                      </Button>
+                    </Tooltip>
+                  ))}
               <Button
                 variant="default"
                 onClick={() => {
@@ -485,6 +605,18 @@ export function TicketPage() {
                   <Button variant="default">{t.tickets.actions}</Button>
                 </Menu.Target>
                 <Menu.Dropdown>
+                  {!readOnly && (macros.data?.macros ?? []).some((m) => m.position === 'menu') && (
+                    <>
+                      {macros
+                        .data!.macros.filter((m) => m.position === 'menu')
+                        .map((m) => (
+                          <Menu.Item key={m.id} color={m.colour} onClick={() => runMacro.mutate(m)}>
+                            {m.title}
+                          </Menu.Item>
+                        ))}
+                      <Menu.Divider />
+                    </>
+                  )}
                   {can('tickets', 'create') && (
                     <Menu.Item onClick={() => (setModalValue(''), setModal({ kind: 'child' }))}>
                       {t.tickets.createChild}
@@ -664,7 +796,8 @@ export function TicketPage() {
                   )}
                   {compose && tk && (
                     <EmailComposer
-                      key={`${compose.mode}-${compose.source?.id ?? 'new'}`}
+                      key={`${compose.mode}-${compose.source?.id ?? 'new'}-${compose.templateId ?? ''}`}
+                      initialTemplateId={compose.templateId ?? null}
                       mode={compose.mode}
                       source={compose.source}
                       ticket={{ id: tk.id, title: tk.title, categoryId: tk.categoryId }}

@@ -50,6 +50,7 @@ export interface RightsProfileDto {
   categories: 'all' | { categoryId: string; access: boolean; distribute: boolean; distributionLimit: number | null }[];
   ticketViews: 'all' | string[];
   mailboxes: 'all' | string[];
+  macros: 'all' | string[];
 }
 
 export interface AuditEntry {

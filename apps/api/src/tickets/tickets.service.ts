@@ -47,6 +47,7 @@ import {
   tickets,
   users,
 } from '../db/schema';
+import { NotificationsService } from '../notifications/notifications.service';
 import { DistributionService } from '../sla/distribution.service';
 import { SlaService } from '../sla/sla.service';
 import { HistoryService } from '../history/history.service';
@@ -128,6 +129,7 @@ export class TicketsService {
     @Inject(AccountsService) private readonly accounts: AccountsService,
     @Inject(SlaService) private readonly sla: SlaService,
     @Inject(DistributionService) private readonly distribution: DistributionService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
   // ------------------------------------------------------------------ reading
@@ -500,6 +502,7 @@ export class TicketsService {
       await this.sla.refresh(tx, [row!.id]);
       return row!.id;
     });
+    await this.notifications.ticketEvent(id, { type: 'created', actorId: auth.user.id });
     const visible = canSeeCategory(auth.ticketRights, t.categoryId);
     return visible ? { ...(await this.get(auth, id)), visible } : { id, visible };
   }
@@ -650,6 +653,10 @@ export class TicketsService {
       await this.sla.refresh(tx, [id]);
     });
     // A slot may have freed up (spec 9: Waiting, Closed, Archived or reassigned).
+    if (t.userId && t.userId !== before.userId)
+      await this.notifications.ticketEvent(id, { type: 'assigned', actorId: auth.user.id });
+    if (t.categoryId !== before.categoryId)
+      await this.notifications.ticketEvent(id, { type: 'moved', actorId: auth.user.id });
     if (before.state !== t.state || before.userId !== t.userId || before.categoryId !== t.categoryId)
       await this.distribution.run([before.categoryId, t.categoryId]);
     return this.getOrHidden(auth, id);
