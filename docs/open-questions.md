@@ -95,14 +95,24 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 | O-8 | Reply target                 | Aim to reply to every email within 24 hours. Working hours Mon–Thu 08:30–17:00, Fri 08:30–16:00 (Europe/London, UK bank holidays).                                                                                                                     | Phase 4    |
 | O-9 | Cost                         | Keep it cost-effective: free tiers and self-hosted components where possible.                                                                                                                                                                          | All phases |
 
-## Questions for the owner
+## Owner answers, 04/11/2026 (second round)
 
-1. **24-hour target (O-8).** Should "within 24 hours" count working hours only (e.g. an email at 16:00 on
-   Friday is due by 16:00 on Monday) or clock hours (due 16:00 Saturday)? Working hours is the usual
-   choice and what the SLA engine supports.
-2. **Google Workspace or personal Gmail?** Are the four inboxes on a company Google Workspace domain
-   (e.g. support@yourcompany.co.uk) or free @gmail.com accounts? This changes the Google sign-in setup.
-3. **Automated mail (O-3).** Which senders count as automated for you? A few examples (newsletters,
-   supplier systems, delivery notifications) will help seed the filter rules.
-4. **Hosting.** Where should Relay Desk run? A small UK/EU cloud server (roughly £10–20 a month) is
-   enough for the trial; I can write the setup steps.
+| #    | Topic                         | Decision                                                                                                                                                                                                | Status     |
+| ---- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| O-10 | Google account type           | All inboxes are on the company Google Workspace domain **@ricoman.com**. Use an _internal_ OAuth app in Ricoman's Google Cloud project (no Google review, tokens don't expire weekly).                  | Phase 3    |
+| O-11 | Reply targets by enquiry type | Purchase orders: reply within **2 working hours**; quotation requests: **4 working hours**; everything else: **8 working hours** (one working day). Working hours Mon–Thu 08:30–17:00, Fri 08:30–16:00. | Phase 4    |
+| O-12 | Filtering                     | No automatic filtering for now: every email becomes a ticket. Some emails need action and some are FYI; agents decide.                                                                                  | Phase 3    |
+| O-13 | Hosting                       | Run on the existing server that hosts quotes.ricoman.com, if it has room.                                                                                                                               | Deployment |
+| O-14 | Branding                      | Ricoman colours, fonts and logos to be applied once the assets are supplied; not blocking.                                                                                                              | Any time   |
+
+## Proposed (awaiting owner confirmation)
+
+- **How the enquiry type is set (O-11).** A ticket field "Enquiry type" (Purchase order / Quotation
+  request / General). Email routing rules set it from the subject and body (e.g. "PO", "purchase order",
+  "quote", "quotation"); agents can change it, and the reply target updates.
+- **Reply target = first reply (O-11).** The 2/4/8 hours apply to the first reply to the customer.
+- **FYI emails (O-12).** A one-click "FYI – no reply needed" action that closes the ticket and stops its
+  reply-target clock, so FYI mail doesn't count as missed.
+- **Server details (O-13).** Needed before deployment: operating system, the web server in front of
+  quotes.ricoman.com (nginx, Apache, IIS…), free memory/disk, whether Docker can be installed, and the
+  sub-domain to use (e.g. helpdesk.ricoman.com).
