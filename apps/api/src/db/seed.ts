@@ -1,6 +1,16 @@
 import { and, eq, isNull } from 'drizzle-orm';
-import { fullAccessProfile, normaliseAccessProfile, type AccessProfile, type UserType } from '@relay-desk/domain';
+import {
+  ENGLAND_AND_WALES_BANK_HOLIDAYS,
+  fullAccessProfile,
+  mergeExceptions,
+  normaliseAccessProfile,
+  type AccessProfile,
+  type Interval,
+  type SlaTarget,
+  type UserType,
+} from '@relay-desk/domain';
 import { PasswordService } from '../auth/password.service';
+import { SlaService } from '../sla/sla.service';
 import { createDb, createPool, type Db } from './db';
 import {
   accessProfiles,
@@ -23,6 +33,8 @@ import {
   mailboxQueueCrmDatabases,
   rightsProfileMailboxes,
   routingRules,
+  slaDefinitions,
+  timeGroups,
 } from './schema';
 import type { FieldOption, FieldType, FormLayout } from '@relay-desk/domain';
 
@@ -388,6 +400,30 @@ async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<
     [st.refundIssued, st.resolved, fyi],
   );
   const intake = await category('Intake', { groupName: 'Back office' }, [st.resolved]);
+  // Demo SLA (spec 8): office hours and per-priority targets on Support.
+  const officeHours = await seedTimeGroup(db, 'Office hours (demo)', {
+    week: [
+      ...Array.from({ length: 5 }, () => [{ start: '09:00', end: '17:00' }]),
+      [],
+      [],
+    ],
+  });
+  const standardSla = await seedSla(db, 'Standard support (demo)', {
+    unit: 'hours',
+    basisFieldId: null,
+    targets: {
+      low: { response: 8, solution: 40 },
+      normal: { response: 4, solution: 16 },
+      high: { response: 1, solution: 8 },
+    },
+  });
+  const attached = await db
+    .update(categories)
+    .set({ slaId: standardSla, timeGroupId: officeHours })
+    .where(and(eq(categories.id, support), isNull(categories.slaId)))
+    .returning({ id: categories.id });
+  // Existing tickets get their deadlines now (new ones get them when saved).
+  for (const c of attached) await new SlaService(db).refreshCategory(c.id);
   const doNotReply = await category('Do not reply', { groupName: 'Back office' }, [st.resolved]);
   for (const [categoryId, access, limit] of [
     [support, true, 5],
@@ -462,7 +498,47 @@ async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<
     views: { myOpen, unassigned },
     mailbox: mailbox!.id,
     enquiryType,
+    officeHours,
+    standardSla,
   };
+}
+
+/** Creates a time group once (by title); England and Wales bank holidays included. */
+export async function seedTimeGroup(
+  db: Db,
+  title: string,
+  v: { week: Interval[][]; timezone?: string },
+): Promise<string> {
+  const [existing] = await db
+    .select()
+    .from(timeGroups)
+    .where(and(eq(timeGroups.title, title), isNull(timeGroups.deletedAt)));
+  if (existing) return existing.id;
+  const [row] = await db
+    .insert(timeGroups)
+    .values({
+      title,
+      timezone: v.timezone ?? 'Europe/London',
+      week: v.week,
+      exceptions: mergeExceptions([], ENGLAND_AND_WALES_BANK_HOLIDAYS),
+    })
+    .returning();
+  return row!.id;
+}
+
+/** Creates an SLA once (by title). */
+export async function seedSla(
+  db: Db,
+  title: string,
+  v: { unit: 'hours' | 'minutes'; basisFieldId: string | null; targets: Record<string, SlaTarget> },
+): Promise<string> {
+  const [existing] = await db
+    .select()
+    .from(slaDefinitions)
+    .where(and(eq(slaDefinitions.title, title), isNull(slaDefinitions.deletedAt)));
+  if (existing) return existing.id;
+  const [row] = await db.insert(slaDefinitions).values({ title, ...v }).returning();
+  return row!.id;
 }
 
 /** "Enquiry type" drives reply targets (owner O-11): purchase orders 2h, quotes 4h, else 8h. */

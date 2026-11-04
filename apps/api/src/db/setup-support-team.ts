@@ -1,8 +1,9 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { fullAccessProfile } from '@relay-desk/domain';
 import { PasswordService } from '../auth/password.service';
+import { SlaService } from '../sla/sla.service';
 import { createDb, createPool, type Db } from './db';
-import { DEFAULT_SEED_PASSWORD, enquiryTypeField, seed, seedRoutingRules } from './seed';
+import { DEFAULT_SEED_PASSWORD, enquiryTypeField, seed, seedRoutingRules, seedSla, seedTimeGroup } from './seed';
 import type { Address } from '@relay-desk/domain';
 import {
   accessProfiles,
@@ -110,6 +111,36 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   for (const t of LABELS) cat[t] = await category(t, GROUP.labels);
   for (const t of Object.values(PERSONAL)) cat[t] = await category(t, GROUP.personal);
 
+  // Reply targets (owner O-8, O-11): purchase orders 2 h, quotation requests 4 h, anything
+  // else 8 h, counted in office hours with England and Wales bank holidays. The solution
+  // target (5 working days) is a placeholder the team can change (open question Q-P4-1).
+  const officeHours = await seedTimeGroup(db, 'Ricoman office hours', {
+    week: [
+      ...Array.from({ length: 4 }, () => [{ start: '08:30', end: '17:00' }]),
+      [{ start: '08:30', end: '16:00' }],
+      [],
+      [],
+    ],
+  });
+  const replyTargets = await seedSla(db, 'Reply targets', {
+    unit: 'hours',
+    basisFieldId: enquiryType,
+    targets: {
+      purchase_order: { response: 2, solution: 40 },
+      quotation: { response: 4, solution: 40 },
+      general: { response: 8, solution: 40 },
+      _other: { response: 8, solution: 40 },
+    },
+  });
+  for (const id of Object.values(cat)) {
+    const attached = await db
+      .update(categories)
+      .set({ slaId: replyTargets, timeGroupId: officeHours })
+      .where(and(eq(categories.id, id), isNull(categories.slaId)))
+      .returning({ id: categories.id });
+    if (attached.length) await new SlaService(db).refreshCategory(id);
+  }
+
   const view = async (name: string, categoryId: string) => {
     const [row] = await db
       .select()
@@ -204,7 +235,7 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   // Enquiry type from the subject/body (owner O-11). No automatic filtering (owner O-12).
   await seedRoutingRules(db, { enquiryType, includeNoReply: false });
 
-  if (opts.demo) await demoData(db, rp, cat, views, opts.password ?? DEFAULT_SEED_PASSWORD);
+  if (opts.demo) await demoData(db, rp, cat, views, opts.password ?? DEFAULT_SEED_PASSWORD, enquiryType);
   return { categories: cat, views, rightsProfiles: rp, mailboxes: boxes };
 }
 
@@ -215,6 +246,7 @@ async function demoData(
   cat: Record<string, string>,
   views: Record<string, string>,
   password: string,
+  enquiryType: string,
 ) {
   const [agentAp] = await db.select().from(accessProfiles).where(eq(accessProfiles.name, 'Agent'));
   let [adminAp] = await db.select().from(accessProfiles).where(eq(accessProfiles.name, 'Administrator'));
@@ -386,8 +418,17 @@ async function demoData(
         updatedAt: hours(d.ago / 2),
         lastActivityAt: hours(d.ago / 2),
         createdById: u.Richard,
+        // What the routing rules would have set (owner O-11), so reply targets show.
+        customFields: {
+          [enquiryType]: /\bquot(e|ation)\b/i.test(d.title)
+            ? 'quotation'
+            : /\b(PO|purchase order)\b/i.test(d.title)
+              ? 'purchase_order'
+              : 'general',
+        },
       })
       .returning();
+    await new SlaService(db).refresh(db, [t!.id]);
     for (const [who, body] of d.comments ?? []) {
       await db.insert(activities).values({
         ticketId: t!.id,

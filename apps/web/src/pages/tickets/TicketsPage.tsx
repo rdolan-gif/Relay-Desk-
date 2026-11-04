@@ -20,6 +20,7 @@ import type { FilterCondition } from '@relay-desk/domain';
 import { api } from '../../api';
 import { useAuth } from '../../auth';
 import { EntityList, type Column } from '../../components/EntityList';
+import { SlaIcon } from '../../components/SlaIcon';
 import { FilterBuilder } from '../../components/FilterBuilder';
 import { useCrmMeta, useUserDirectory } from '../../crm/hooks';
 import { formatDateTime } from '../../format';
@@ -120,7 +121,7 @@ export function TicketsPage() {
     {
       key: 'deadline',
       label: t.tickets.deadline,
-      render: (r) => formatDateTime(r.deadline, tz) || t.crm.none,
+      render: (r) => <SlaIcon sla={r.sla} deadline={r.deadline} closedAt={r.closedAt} />,
       sortKey: 'deadline',
     },
     {
@@ -250,6 +251,7 @@ export function TicketsPage() {
             'statusIds',
             'priority',
             'userName',
+            'deadline',
             'lastActivityAt',
           ]}
           filterFields={meta.data.filterFields}

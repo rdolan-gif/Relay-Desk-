@@ -193,6 +193,7 @@ export class InboundService {
           contactId: contact?.id ?? null,
           statusIds: routing.actions.statusIds ?? [],
           customFields: routing.actions.customFields ?? {},
+          distributable: true,
         });
         created = true;
       }
@@ -288,6 +289,8 @@ export class InboundService {
         autoResponded = sent.status === 'sent';
       }
     }
+    // Hand the new ticket to an agent, or leave it in the backlog (spec 9).
+    if (result.created) await this.tickets.distributeTicket(result.ticketId);
     return {
       outcome: result.created ? 'created' : 'appended',
       ticketId: result.ticketId,

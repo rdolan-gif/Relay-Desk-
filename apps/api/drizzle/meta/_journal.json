@@ -57,6 +57,13 @@
       "when": 1793789964841,
       "tag": "0007_mailbox_rights_upgrade",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793792701207,
+      "tag": "0008_sla_distribution",
+      "breakpoints": true
     }
   ]
 }

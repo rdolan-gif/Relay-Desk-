@@ -177,6 +177,8 @@ const EMPTY_CATEGORY: Omit<Category, 'id'> = {
   allowExternalComments: false,
   waitingRequiresReopen: false,
   defaultCrmDatabaseId: null,
+  slaId: null,
+  timeGroupId: null,
   formLayout: { sections: [] },
   autofocusTab: 'form',
   statusIds: [],
@@ -191,6 +193,11 @@ export function CategoriesPage() {
     queryFn: () => api<TicketStatus[]>('GET', '/settings/ticket-statuses'),
   });
   const list = useQuery({ queryKey: ['categories'], queryFn: () => api<Category[]>('GET', '/settings/categories') });
+  const slas = useQuery({ queryKey: ['sla-options'], queryFn: () => api<{ id: string; title: string }[]>('GET', '/sla-options') });
+  const timeGroups = useQuery({
+    queryKey: ['time-group-options'],
+    queryFn: () => api<{ id: string; title: string }[]>('GET', '/sla-options/time-groups'),
+  });
   const [draft, setDraft] = useState<(Omit<Category, 'id'> & { id?: string }) | null>(null);
   const { save, remove } = useCrud<Omit<Category, 'id'> & { id?: string }>(
     '/settings/categories',
@@ -261,6 +268,25 @@ export function CategoriesPage() {
                 max={3650}
                 value={draft.autoArchiveDays ?? ''}
                 onChange={(v) => set({ autoArchiveDays: v === '' ? null : Number(v) })}
+              />
+            </Group>
+            <Group grow>
+              <Select
+                label={t.sla.category}
+                data={[{ value: '', label: t.sla.none }, ...(slas.data ?? []).map((x) => ({ value: x.id, label: x.title }))]}
+                value={draft.slaId ?? ''}
+                allowDeselect={false}
+                onChange={(v) => set({ slaId: v || null })}
+              />
+              <Select
+                label={t.timeGroups.category}
+                data={[
+                  { value: '', label: t.timeGroups.allDay },
+                  ...(timeGroups.data ?? []).map((x) => ({ value: x.id, label: x.title })),
+                ]}
+                value={draft.timeGroupId ?? ''}
+                allowDeselect={false}
+                onChange={(v) => set({ timeGroupId: v || null })}
               />
             </Group>
             <Group grow>

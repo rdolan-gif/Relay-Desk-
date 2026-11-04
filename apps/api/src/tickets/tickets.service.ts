@@ -47,6 +47,8 @@ import {
   tickets,
   users,
 } from '../db/schema';
+import { DistributionService } from '../sla/distribution.service';
+import { SlaService } from '../sla/sla.service';
 import { HistoryService } from '../history/history.service';
 import { AccountsService } from '../crm/accounts.service';
 import { sanitizeRich } from './sanitize';
@@ -124,6 +126,8 @@ export class TicketsService {
     @Inject(CustomFieldsService) private readonly fieldsService: CustomFieldsService,
     @Inject(TicketSettingsService) private readonly settings: TicketSettingsService,
     @Inject(AccountsService) private readonly accounts: AccountsService,
+    @Inject(SlaService) private readonly sla: SlaService,
+    @Inject(DistributionService) private readonly distribution: DistributionService,
   ) {}
 
   // ------------------------------------------------------------------ reading
@@ -174,9 +178,11 @@ export class TicketsService {
       .select({ total: sql<number>`count(*)::int` })
       .from(tickets)
       .where(cond)) as [{ total: number }];
+    const slas = await this.sla.describe(rows.map((r) => r.ticket));
     return pageOf(
       rows.map((r) => ({
         ...publicTicket(r.ticket),
+        sla: slas.get(r.ticket.id) ?? null,
         categoryTitle: r.categoryTitle,
         userName: r.userName,
         contactName: r.contactDatabaseId && canSeeCrmDatabase(auth.rights, r.contactDatabaseId) ? r.contactName : null,
@@ -203,6 +209,8 @@ export class TicketsService {
       contactId: string | null;
       statusIds: string[];
       customFields: Record<string, unknown>;
+      /** Arrived through a mailbox queue: may be handed out by distribution (spec 9). */
+      distributable?: boolean;
     },
   ): Promise<number> {
     const [cat] = await tx
@@ -241,9 +249,11 @@ export class TicketsService {
         closedAt: isResolved(f.state) ? new Date() : null,
         customFields: custom,
         createdById: auth?.user.id ?? null,
+        distributable: !!f.distributable,
       })
       .returning();
     await this.history.record(tx, auth, 'ticket', row!.id, 'create', diffFields({}, ticketFlat(row!, [])));
+    await this.sla.refresh(tx, [row!.id]);
     return row!.id;
   }
 
@@ -345,6 +355,7 @@ export class TicketsService {
         .map(({ categoryId: _c, ...c }) => c),
       contactCard: await this.contactCard(auth, t),
       merges: await this.activeMerges(id),
+      sla: (await this.sla.describe([t])).get(t.id) ?? null,
     };
   }
 
@@ -476,6 +487,7 @@ export class TicketsService {
           statusIds: t.statusIds,
           parentId: t.parentId ? Number(t.parentId) : null,
           deadline: input.deadline ? new Date(input.deadline) : null,
+          deadlineManual: !!input.deadline,
           reopenAt: t.reopenAt,
           closedAt: isResolved(t.state) ? new Date() : null,
           customFields,
@@ -485,6 +497,7 @@ export class TicketsService {
       if (followers.length)
         await tx.insert(ticketFollowers).values(followers.map((userId) => ({ ticketId: row!.id, userId })));
       await this.history.record(tx, auth, 'ticket', row!.id, 'create', diffFields({}, ticketFlat(row!, followers)));
+      await this.sla.refresh(tx, [row!.id]);
       return row!.id;
     });
     const visible = canSeeCategory(auth.ticketRights, t.categoryId);
@@ -590,6 +603,12 @@ export class TicketsService {
     });
     const beforeFollowers = await this.followerIds(id);
     const followers = input.followerIds ? await this.validFollowers(auth, input.followerIds) : beforeFollowers;
+    // Only a deadline the person actually changed becomes manual (spec 8); clearing it hands
+    // the deadline back to the SLA.
+    const newDeadline =
+      input.deadline !== undefined ? (input.deadline ? new Date(input.deadline) : null) : before.deadline;
+    const deadlineChanged = (newDeadline?.getTime() ?? null) !== (before.deadline?.getTime() ?? null);
+    const deadlineManual = deadlineChanged ? newDeadline !== null : before.deadlineManual;
 
     await this.db.transaction(async (tx) => {
       const [row] = await tx
@@ -604,7 +623,8 @@ export class TicketsService {
           contactId: t.contactId,
           statusIds: t.statusIds,
           parentId: t.parentId ? Number(t.parentId) : null,
-          deadline: input.deadline !== undefined ? (input.deadline ? new Date(input.deadline) : null) : before.deadline,
+          deadline: newDeadline,
+          deadlineManual,
           reopenAt: t.reopenAt,
           closedAt: closedAtFor(before, t.state),
           customFields,
@@ -627,7 +647,11 @@ export class TicketsService {
         'update',
         diffFields(ticketFlat(before, beforeFollowers), ticketFlat(row, followers)),
       );
+      await this.sla.refresh(tx, [id]);
     });
+    // A slot may have freed up (spec 9: Waiting, Closed, Archived or reassigned).
+    if (before.state !== t.state || before.userId !== t.userId || before.categoryId !== t.categoryId)
+      await this.distribution.run([before.categoryId, t.categoryId]);
     return this.getOrHidden(auth, id);
   }
 
@@ -764,6 +788,7 @@ export class TicketsService {
         { field: 'mergedTicketIds', old: null, new: merged.map((m) => m.id) },
         ...diffFields({ followerIds: survivorFollowers.sort() }, { followerIds: afterFollowers.sort() }),
       ]);
+      await this.sla.refresh(tx, [survivorId]);
     });
     return this.get(auth, survivorId);
   }
@@ -807,6 +832,7 @@ export class TicketsService {
       await this.history.record(tx, auth, 'ticket', survivorId, 'merge', [
         { field: 'unmergedTicketId', old: null, new: m.mergedId },
       ]);
+      await this.sla.refresh(tx, [survivorId, m.mergedId]);
     });
     return this.get(auth, survivorId);
   }
@@ -829,11 +855,23 @@ export class TicketsService {
         : [fyi.id]
       : t.statusIds;
     const result = await this.update(auth, id, { state: 'closed', statusIds }, 'form');
-    await this.db.update(tickets).set({ noReplyNeeded: true }).where(eq(tickets.id, id));
-    await this.db.transaction((tx) =>
-      this.history.record(tx, auth, 'ticket', id, 'update', [{ field: 'noReplyNeeded', old: false, new: true }]),
-    );
-    return result;
+    await this.db.transaction(async (tx) => {
+      await tx.update(tickets).set({ noReplyNeeded: true }).where(eq(tickets.id, id));
+      await this.history.record(tx, auth, 'ticket', id, 'update', [{ field: 'noReplyNeeded', old: false, new: true }]);
+      await this.sla.refresh(tx, [id]);
+    });
+    return 'sla' in result ? this.getOrHidden(auth, id) : result;
+  }
+
+  /** Recomputes SLA columns in the caller's transaction (e.g. after the first reply, spec 8). */
+  refreshSla(tx: DbOrTx, ids: number[]) {
+    return this.sla.refresh(tx, ids);
+  }
+
+  /** Runs distribution for a ticket's category (after it was created from a mailbox). */
+  async distributeTicket(id: number) {
+    const [t] = await this.db.select({ categoryId: tickets.categoryId }).from(tickets).where(eq(tickets.id, id));
+    if (t) await this.distribution.run([t.categoryId]);
   }
 
   /** Merges into this ticket that can still be undone. */
@@ -906,6 +944,7 @@ export class TicketsService {
           { field: 'state', old: t.state, new: next },
           { field: 'reopenAt', old: iso(t.reopenAt), new: null },
         ]);
+        await this.sla.refresh(tx, [t.id], now);
       });
       done.push(t.id);
     }
@@ -935,6 +974,7 @@ export class TicketsService {
         await this.history.record(tx, null, 'ticket', t.id, 'update', [
           { field: 'state', old: 'closed', new: 'archived' },
         ]);
+        await this.sla.refresh(tx, [t.id], now);
       });
     }
     return due.map((t) => t.id);
@@ -952,6 +992,7 @@ export class TicketsService {
       .set({ state, closedAt: closedAtFor(t, state), version: t.version + 1, updatedAt: new Date() })
       .where(eq(tickets.id, t.id));
     await this.history.record(tx, auth, 'ticket', t.id, 'update', [{ field: 'state', old: t.state, new: state }]);
+    await this.sla.refresh(tx, [t.id]);
     return state;
   }
 
@@ -1050,5 +1091,9 @@ export function publicTicket(t: Row) {
     lastActivityAt: t.lastActivityAt,
     firstAnswerAt: t.firstAnswerAt,
     noReplyNeeded: t.noReplyNeeded,
+    firstAnswerDeadline: t.firstAnswerDeadline,
+    deadlineManual: t.deadlineManual,
+    firstAnswerMet: t.firstAnswerMet,
+    solutionMet: t.solutionMet,
   };
 }

@@ -35,6 +35,8 @@ import { TicketsPage } from './pages/tickets/TicketsPage';
 import { CategoriesPage, StatusesPage, TeamViewsPage } from './pages/settings/TicketSettingsPages';
 import { CustomFieldsPage } from './pages/settings/CustomFieldsPage';
 import { MailboxesPage } from './pages/email/MailboxesPage';
+import { ReadyForEmail } from './components/ReadyForEmail';
+import { SlasPage, TimeGroupsPage } from './pages/settings/SlaPages';
 import { NewEmailPage } from './pages/email/NewEmailPage';
 import { RoutingRulesPage } from './pages/email/RoutingRulesPage';
 import { TemplatesPage } from './pages/email/TemplatesPage';
@@ -83,6 +85,8 @@ function Shell() {
     { to: '/settings/ticket-views', label: t.nav.ticketViews, module: 'settings_ticket_views' as const },
     { to: '/settings/mailboxes', label: t.nav.mailboxes, module: 'settings_mailbox_queues' as const },
     { to: '/settings/email-routing', label: t.nav.emailRouting, module: 'settings_email_routing' as const },
+    { to: '/settings/slas', label: t.nav.slas, module: 'settings_sla' as const },
+    { to: '/settings/working-hours', label: t.nav.timeGroups, module: 'settings_time_groups' as const },
     { to: '/settings/custom-fields', label: t.nav.customFields, module: 'settings_custom_fields' as const },
     { to: '/settings/crm-databases', label: t.nav.crmDatabases, module: 'settings_crm_databases' as const },
     { to: '/settings/crm-record-types', label: t.nav.recordTypes, module: 'settings_crm_record_types' as const },
@@ -118,6 +122,7 @@ function Shell() {
           </Group>
           {(crmLinks.length > 0 || can('tickets', 'read')) && <GlobalSearch />}
           <Group>
+            {can('tickets', 'read') && <ReadyForEmail />}
             <Text size="sm">{me!.user.name}</Text>
             <ActionIcon variant="default" size="lg" onClick={toggleColorScheme} aria-label={t.common.theme}>
               {scheme === 'dark' ? '☀' : '☾'}
@@ -190,6 +195,8 @@ function Shell() {
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/settings/mailboxes" element={<MailboxesPage />} />
           <Route path="/settings/email-routing" element={<RoutingRulesPage />} />
+          <Route path="/settings/slas" element={<SlasPage />} />
+          <Route path="/settings/working-hours" element={<TimeGroupsPage />} />
           <Route path="/settings/crm-databases" element={<CrmDatabasesPage />} />
           <Route path="/settings/crm-record-types" element={<RecordTypesPage />} />
           <Route path="/crm/contacts" element={<ContactsPage />} />

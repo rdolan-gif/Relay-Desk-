@@ -29,7 +29,11 @@ import type {
   RoutingCondition,
   Priority,
   StatusRequired,
+  SlaTarget,
+  SlaUnit,
   TicketState,
+  Interval,
+  TimeException,
   UserType,
 } from '@relay-desk/domain';
 
@@ -100,6 +104,8 @@ export const users = pgTable(
     timezone: text('timezone').notNull().default('Europe/London'),
     /** Email sign-off, e.g. "Kind regards,\nRyan" (owner answer Q13). Null = default. */
     signature: text('signature'),
+    /** When distribution last gave this user a ticket (spec 9 tie-break). */
+    lastDistributedAt: timestamp('last_distributed_at', { withTimezone: true }),
     ...timestamps,
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -291,6 +297,8 @@ export const accounts = pgTable(
       .default(sql`'{}'::text[]`),
     addresses: jsonb('addresses').$type<Address[]>().notNull().default([]),
     customFields: jsonb('custom_fields').$type<Record<string, unknown>>().notNull().default({}),
+    /** Overrides the category's SLA for this account's contacts (spec 8). */
+    slaId: uuid('sla_id').references(() => slaDefinitions.id),
     ...timestamps,
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -431,6 +439,10 @@ export const categories = pgTable('categories', {
   defaultCrmDatabaseId: uuid('default_crm_database_id').references(() => crmDatabases.id),
   formLayout: jsonb('form_layout').$type<FormLayout>().notNull().default({ sections: [] }),
   autofocusTab: text('autofocus_tab').notNull().default('form'),
+  /** SLA (spec 7.1): none = no automatic deadline. */
+  slaId: uuid('sla_id').references(() => slaDefinitions.id),
+  /** Working hours for SLA maths; none = the clock runs 24/7. */
+  timeGroupId: uuid('time_group_id').references(() => timeGroups.id),
   ...timestamps,
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
@@ -500,6 +512,15 @@ export const tickets = pgTable(
     firstAnswerAt: timestamp('first_answer_at', { withTimezone: true }),
     /** Closed as "FYI – no reply needed" (owner O-12): no reply target applies. */
     noReplyNeeded: boolean('no_reply_needed').notNull().default(false),
+    /** SLA (spec 8). The deadline column above is the solution deadline. */
+    firstAnswerDeadline: timestamp('first_answer_deadline', { withTimezone: true }),
+    deadlineManual: boolean('deadline_manual').notNull().default(false),
+    waitingSince: timestamp('waiting_since', { withTimezone: true }),
+    slaPausedSeconds: integer('sla_paused_seconds').notNull().default(0),
+    firstAnswerMet: boolean('first_answer_met'),
+    solutionMet: boolean('solution_met'),
+    /** Created through a mailbox queue with no User: eligible for distribution (spec 9). */
+    distributable: boolean('distributable').notNull().default(false),
     isAnonymised: boolean('is_anonymised').notNull().default(false),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -509,6 +530,9 @@ export const tickets = pgTable(
     index('tickets_contact_idx').on(t.contactId),
     index('tickets_parent_idx').on(t.parentId),
     index('tickets_reopen_idx').on(t.reopenAt),
+    index('tickets_backlog_idx')
+      .on(t.categoryId, t.createdAt)
+      .where(sql`distributable AND user_id IS NULL AND state = 'open' AND deleted_at IS NULL`),
   ],
 );
 
@@ -819,3 +843,42 @@ export const emailTemplates = pgTable('email_templates', {
   ...timestamps,
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
+
+/** SLA definitions (spec 8). */
+export const slaDefinitions = pgTable('sla_definitions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  unit: text('unit').$type<SlaUnit>().notNull().default('hours'),
+  /** null = targets by priority; otherwise a select custom field (owner O-11: enquiry type). */
+  basisFieldId: uuid('basis_field_id').references(() => customFields.id),
+  targets: jsonb('targets').$type<Record<string, SlaTarget>>().notNull().default({}),
+  ...timestamps,
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+});
+
+/** Time groups: weekly working hours, timezone and dated exceptions (spec 8). */
+export const timeGroups = pgTable('time_groups', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  timezone: text('timezone').notNull().default('Europe/London'),
+  /** Index 0 = Monday … 6 = Sunday. */
+  week: jsonb('week').$type<Interval[][]>().notNull(),
+  exceptions: jsonb('exceptions').$type<TimeException[]>().notNull().default([]),
+  ...timestamps,
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+});
+
+/** "Ready for email": the mailbox queues a user is logged in to for distribution (spec 9). */
+export const queueLogins = pgTable(
+  'queue_logins',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    queueId: uuid('queue_id')
+      .notNull()
+      .references(() => mailboxQueues.id, { onDelete: 'cascade' }),
+    since: timestamp('since', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.queueId] })],
+);

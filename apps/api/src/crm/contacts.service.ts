@@ -14,6 +14,7 @@ import {
 import type { AuthContext } from '../common/request-context';
 import { DB, type Db, type DbOrTx } from '../db/db';
 import { accounts, contacts, crmDatabases } from '../db/schema';
+import { SlaService } from '../sla/sla.service';
 import { HistoryService } from '../history/history.service';
 import { applyCustomInput, filterFields, filterSql, likeTerm, pageOf, scopeSql, type ListQuery } from './crm-common';
 import { CustomFieldsService } from './custom-fields.service';
@@ -48,6 +49,7 @@ export class ContactsService {
     @Inject(DB) private readonly db: Db,
     @Inject(HistoryService) private readonly history: HistoryService,
     @Inject(CustomFieldsService) private readonly fields: CustomFieldsService,
+    @Inject(SlaService) private readonly sla: SlaService,
   ) {}
 
   /** Lists only contacts in CRM databases the caller's rights include (spec 4, 12.1). */
@@ -214,7 +216,7 @@ export class ContactsService {
       input: input.customFields,
       isCreate: false,
     });
-    return this.db.transaction(async (tx) => {
+    const updated = await this.db.transaction(async (tx) => {
       const [row] = await tx
         .update(contacts)
         .set({
@@ -229,8 +231,11 @@ export class ContactsService {
         .where(eq(contacts.id, id))
         .returning();
       await this.history.record(tx, auth, 'contact', id, 'update', diffFields(contactFlat(before), contactFlat(row!)));
-      return publicContact(row!);
+      return row!;
     });
+    // A different account can bring a different SLA (spec 8).
+    if (updated.accountId !== before.accountId) await this.sla.refreshContact(id);
+    return publicContact(updated);
   }
 
   async remove(auth: AuthContext, id: string) {

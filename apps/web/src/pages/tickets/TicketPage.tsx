@@ -32,6 +32,7 @@ import { CopyValue } from '../../components/CopyValue';
 import { DateTimeField } from '../../components/DateFields';
 import { DynamicForm } from '../../components/DynamicForm';
 import { ContactPicker, UserPicker } from '../../components/FieldInput';
+import { SlaIcon } from '../../components/SlaIcon';
 import { HistoryPanel } from '../../components/HistoryPanel';
 import { RichTextEditor } from '../../components/RichTextEditor';
 import { EmailActivity } from '../../email/EmailActivity';
@@ -168,7 +169,13 @@ export function TicketPage() {
       let saved: TicketDetail | undefined;
       // Form changes are saved first; if the comment then fails, the form is still saved (spec 6.2).
       if (dirty)
-        saved = await api<TicketDetail>('PATCH', `/tickets/${id}`, { ...draft, version: ticket.data!.version });
+        saved = await api<TicketDetail>('PATCH', `/tickets/${id}`, {
+          ...draft,
+          // Only a deadline the person changed is sent: a sent deadline becomes manual and
+          // stops following the SLA (spec 8).
+          deadline: draft!.deadline !== ticket.data!.deadline ? draft!.deadline : undefined,
+          version: ticket.data!.version,
+        });
       if (hasComment) await api('POST', `/tickets/${id}/comments`, comment);
       return saved;
     },
@@ -406,6 +413,7 @@ export function TicketPage() {
                     {t.tickets.priorities[tk.priority]}
                   </Badge>
                 )}
+                {tk?.sla?.indicator && <SlaIcon sla={tk.sla} deadline={tk.deadline} closedAt={tk.closedAt} />}
               </>
             )}
           </Group>

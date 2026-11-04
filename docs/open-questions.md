@@ -81,6 +81,22 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 | Q-P2-15 | Date-time inputs              | Use the browser's own picker, which follows the computer's regional settings (DD/MM/YYYY on UK-configured machines).                       | Assumed  |
 | Q-P2-16 | "Sessions view" in History    | Comes with time tracking (spec 6.5, [SHOULD]); "Hide activities" is built.                                                                 | Assumed  |
 
+## Phase 4 decisions
+
+| #       | Topic                   | Decision                                                                                                                                                                    | Status   |
+| ------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Q-P4-1  | Ricoman solution target | The reply targets (2/4/8 h) are the SLA's Response. The spec needs a Solution time too; it is set to 40 working hours (about a week) for now. Change it in Settings › SLAs. | **Open** |
+| Q-P4-2  | Reply targets (O-11)    | Built as proposed: an SLA based on the "Enquiry type" field. Routing rules set the type; agents can change it and the target moves. Unknown or empty values use 8 hours.    | Decided  |
+| Q-P4-3  | Automatic distribution  | Ricoman's setup sets no distribution limits, so nothing is handed out automatically until a limit is set on a rights profile (e.g. Enquiries, limit 5). Do you want it?     | **Open** |
+| Q-P4-4  | Ready for email         | A toggle per mailbox in the header. Signing out turns it off. Being on a break does not stop distribution (spec 9).                                                         | Assumed  |
+| Q-P4-5  | "All categories" rights | Means no distribution limit, so those users (e.g. administrators) never receive tickets automatically.                                                                      | Assumed  |
+| Q-P4-6  | Branch SLA              | A branch without its own SLA uses its company's.                                                                                                                            | Assumed  |
+| Q-P4-7  | Bank holidays           | England and Wales list from GOV.UK; when GOV.UK can't be reached a built-in list (2026–2027) is used. Imports add future dates only and never overwrite an existing date.   | Assumed  |
+| Q-P4-8  | Manual deadline         | A deadline someone types is manual and never recalculated; clearing it hands the deadline back to the SLA. The form only sends the deadline when it was changed.            | Assumed  |
+| Q-P4-9  | Closed without a reply  | If a ticket is closed (or marked FYI) before its first-reply deadline without a reply, first_answer_met stays empty (not applicable) rather than "missed".                  | Assumed  |
+| Q-P4-10 | Changing an SLA         | Changing an SLA or working hours recalculates the deadlines of that category's tickets; outcomes already decided stay as they were.                                         | Assumed  |
+| Q-P4-11 | Time left               | Icons show working time left ("3 h 20 min left"), not clock time; the tooltip shows the exact dates.                                                                        | Assumed  |
+
 ## Phase 3 decisions
 
 | #      | Topic                    | Decision                                                                                                                                  | Status   |
@@ -121,6 +137,7 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 
 ## Proposed (awaiting owner confirmation)
 
+- _Built in Phase 4 (Q-P4-2); kept here for the record._
 - **How the enquiry type is set (O-11).** A ticket field "Enquiry type" (Purchase order / Quotation
   request / General). Email routing rules set it from the subject and body (e.g. "PO", "purchase order",
   "quote", "quotation"); agents can change it, and the reply target updates.

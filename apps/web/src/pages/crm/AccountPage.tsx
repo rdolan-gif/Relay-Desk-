@@ -40,6 +40,7 @@ interface Draft {
   databaseId: string;
   parentId: string | null;
   branchCode: string | null;
+  slaId?: string | null;
   emails: string[];
   phones: string[];
   addresses: Address[];
@@ -67,6 +68,7 @@ export function AccountPage() {
     queryFn: () => api<Contact[]>('GET', `/crm/accounts/${id}/contacts`),
     enabled: !isNew,
   });
+  const slas = useQuery({ queryKey: ['sla-options'], queryFn: () => api<{ id: string; title: string }[]>('GET', '/sla-options') });
   const [draft, setDraft] = useState<Draft | null>(null);
   const [viewAt, setViewAt] = useState<string | null>(null);
 
@@ -90,6 +92,7 @@ export function AccountPage() {
         databaseId: account.data.databaseId,
         parentId: account.data.parentId,
         branchCode: account.data.branchCode,
+        slaId: account.data.slaId ?? null,
         emails: account.data.emails,
         phones: account.data.phones,
         addresses: account.data.addresses,
@@ -200,6 +203,17 @@ export function AccountPage() {
                       value={shown.branchCode ?? ''}
                       disabled={readOnly}
                       onChange={(e) => set({ branchCode: e.currentTarget.value || null })}
+                    />
+                  )}
+                  {(slas.data?.length ?? 0) > 0 && (
+                    <Select
+                      label={t.sla.account}
+                      description={t.sla.accountHelp}
+                      data={[{ value: '', label: t.sla.inherit }, ...slas.data!.map((x) => ({ value: x.id, label: x.title }))]}
+                      value={shown.slaId ?? ''}
+                      disabled={readOnly}
+                      allowDeselect={false}
+                      onChange={(v) => set({ slaId: v || null })}
                     />
                   )}
                   <MultiValueInput

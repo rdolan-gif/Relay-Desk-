@@ -15,7 +15,17 @@ import type { AuthContext } from '../common/request-context';
 import { CustomFieldsService } from '../crm/custom-fields.service';
 import { formError } from '../crm/form-errors';
 import { DB, type Db } from '../db/db';
-import { categories, categoryStatuses, crmDatabases, ticketStatuses, ticketViews, tickets } from '../db/schema';
+import {
+  categories,
+  categoryStatuses,
+  crmDatabases,
+  slaDefinitions,
+  ticketStatuses,
+  ticketViews,
+  tickets,
+  timeGroups,
+} from '../db/schema';
+import { SlaService } from '../sla/sla.service';
 import { ticketFilterFields } from './ticket-filters';
 
 export interface StatusInput {
@@ -34,6 +44,8 @@ export interface CategoryInput {
   allowExternalComments: boolean;
   waitingRequiresReopen: boolean;
   defaultCrmDatabaseId: string | null;
+  slaId: string | null;
+  timeGroupId: string | null;
   formLayout: FormLayout;
   autofocusTab: string;
   statusIds: string[];
@@ -54,6 +66,7 @@ export class TicketSettingsService {
     @Inject(DB) private readonly db: Db,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(CustomFieldsService) private readonly fields: CustomFieldsService,
+    @Inject(SlaService) private readonly sla: SlaService,
   ) {}
 
   // ----- statuses
@@ -215,7 +228,7 @@ export class TicketSettingsService {
     const before = await this.getCategory(auth, id);
     await this.checkCategory(input);
     const { statusIds, ...values } = input;
-    return this.db.transaction(async (tx) => {
+    const out = await this.db.transaction(async (tx) => {
       const [row] = await tx
         .update(categories)
         .set({ ...values, updatedAt: new Date() })
@@ -240,6 +253,9 @@ export class TicketSettingsService {
       );
       return { ...row!, statusIds };
     });
+    // New SLA or working hours: move the category's deadlines (spec 8).
+    if (before.slaId !== input.slaId || before.timeGroupId !== input.timeGroupId) await this.sla.refreshCategory(id);
+    return out;
   }
 
   async deleteCategory(auth: AuthContext, id: string, ip: string | null) {
@@ -277,6 +293,20 @@ export class TicketSettingsService {
         .from(crmDatabases)
         .where(and(eq(crmDatabases.id, input.defaultCrmDatabaseId), isNull(crmDatabases.deletedAt)));
       if (!db) errors.push('Unknown CRM database.');
+    }
+    if (input.slaId) {
+      const [x] = await this.db
+        .select({ id: slaDefinitions.id })
+        .from(slaDefinitions)
+        .where(and(eq(slaDefinitions.id, input.slaId), isNull(slaDefinitions.deletedAt)));
+      if (!x) errors.push('Unknown SLA.');
+    }
+    if (input.timeGroupId) {
+      const [x] = await this.db
+        .select({ id: timeGroups.id })
+        .from(timeGroups)
+        .where(and(eq(timeGroups.id, input.timeGroupId), isNull(timeGroups.deletedAt)));
+      if (!x) errors.push('Unknown working hours.');
     }
     if (errors.length) throw formError(errors, 'invalid_category');
   }

@@ -64,6 +64,10 @@ import { FakeMailProvider, MAIL_PROVIDERS, type MailProviders } from './email/pr
 import { RoutingRulesService } from './email/routing-rules.service';
 import { TemplatesService } from './email/templates.service';
 import { StorageService } from './storage/storage.service';
+import { DistributionService } from './sla/distribution.service';
+import { QueueLoginController, SlaController, SlaOptionsController, TimeGroupsController } from './sla/sla.controller';
+import { SlaService } from './sla/sla.service';
+import { SlaSettingsService } from './sla/sla-settings.service';
 
 class PoolCloser implements OnApplicationShutdown {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
@@ -110,8 +114,15 @@ export class AppModule {
         RoutingRulesController,
         TemplatesController,
         EmailController,
+        SlaController,
+        TimeGroupsController,
+        QueueLoginController,
+        SlaOptionsController,
       ],
       providers: [
+        SlaService,
+        SlaSettingsService,
+        DistributionService,
         { provide: CONFIG, useValue: config },
         { provide: PG_POOL, useFactory: () => createPool(config.DATABASE_URL) },
         { provide: DB, useFactory: (pool: Pool) => createDb(pool), inject: [PG_POOL] },

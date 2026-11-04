@@ -22,3 +22,7 @@ export * from './email/automated.js';
 export * from './email/threading.js';
 export * from './email/routing.js';
 export * from './email/templates.js';
+export * from './sla/working-time.js';
+export * from './sla/bank-holidays.js';
+export * from './sla/sla.js';
+export * from './sla/distribution.js';

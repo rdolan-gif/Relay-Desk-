@@ -14,7 +14,8 @@ Progress and the test for each acceptance criterion: `docs/progress.md`.
 - Phase 1 (CRM core): **done**
 - Phase 2 (tickets without email): **done**
 - Phase 3 (email channel, Gmail API): **done** — Google setup in `docs/setup/gmail.md`
-- Next: Phase 4 (SLA and distribution; reply targets 2/4/8 working hours by enquiry type)
+- Phase 4 (SLA and distribution; reply targets by enquiry type): **done**
+- Next: Phase 5 (notifications and macros)
 
 ## Stack
 
@@ -91,5 +92,10 @@ Integration tests drop and recreate the schema of `TEST_DATABASE_URL`
   `path` rather than `name`.
 - **Owner decisions** in `docs/open-questions.md` (S-_, O-_) override spec defaults; Phase 3 uses
   the free Gmail API, and all matching email routing rules apply in order.
+- **SLA**: after any ticket write that can move a deadline (state, priority, category, contact,
+  custom values, first reply) call `SlaService.refresh(tx, ids)` in the same transaction; it is
+  idempotent. Outcome flags are frozen once set. A deadline is manual only when a person changed it.
+- **Distribution**: tickets from a mailbox are `distributable`; call `DistributionService.run(categoryIds)`
+  after commit when an Open count can drop or someone becomes Ready for email.
 - **Filters**: validate with domain `validateConditions`, translate with `filterSql`; keep
   `matchesConditions` (domain) and `conditionToSql` (API) in agreement.

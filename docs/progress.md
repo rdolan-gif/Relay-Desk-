@@ -10,6 +10,57 @@
 | Company › Branch › Branch number with phones, emails and addresses; branch card on tickets; branch and company ticket lists | `packages/domain/src/crm/accounts.test.ts`, `apps/api/test/branches.test.ts`           |
 | Support team structure (categories, rights, views)                                                                          | `pnpm db:setup:support` (add `-- --demo` for demo users and data)                      |
 
+## Phase 4 — SLA and distribution ✅
+
+Scope (spec 20): SLA definitions, time groups, account override, deadline maths, Waiting
+pause, SLA icons, outcome flags, distribution with limits and backlog.
+
+**Done when:** all SLA tests in section 8 pass, and with limit 2 and three new tickets for
+one eligible agent, the third waits in backlog until one goes to Waiting.
+
+| Criterion / rule                                                                                            | Test                                                                   |
+| ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 16:00 Friday + 4 h, Mon–Fri 09–17 → Monday 12:00; with a Monday bank holiday → Tuesday 12:00                | `packages/domain/src/sla.test.ts`                                      |
+| Response 1 h + Solution 8 h, created 10:00 Tuesday → first answer 11:00 Tuesday, deadline 11:00 Wednesday   | `sla.test.ts`, `apps/api/test/phase4-acceptance.test.ts`               |
+| Waiting 12:00–15:00 the same working day → deadline 3 working hours later                                   | `sla.test.ts`, `phase4-acceptance.test.ts`                             |
+| Account SLA used with the category's working hours (branches use the company's)                             | `sla.test.ts`, `phase4-acceptance.test.ts`                             |
+| DST weekend in Europe/London does not shift working hours                                                   | `sla.test.ts`                                                          |
+| Recalculate on priority / category / account / working-hours change; a manual deadline never recalculates   | `sla.test.ts`, `phase4-acceptance.test.ts`                             |
+| What counts as a response (agent email, not auto-responses); FYI never counts as missed (owner O-12)        | `sla.test.ts`, `phase4-acceptance.test.ts`                             |
+| Outcome flags first_answer_met / solution_met stored and frozen; the minute job decides missed ones         | `sla.test.ts`, `phase4-acceptance.test.ts`                             |
+| SLA icons: hand → stopwatch; counting, paused, overdue, met, missed; none without SLA or deadline           | `sla.test.ts`, `phase4-acceptance.test.ts`, `e2e/tests/phase4.spec.ts` |
+| Reply targets by enquiry type: purchase order 2 h, quotation 4 h, else 8 h (owner O-11)                     | `sla.test.ts`, `phase4-acceptance.test.ts`                             |
+| Time groups and SLAs validated; UK bank holidays importable (GOV.UK, built-in fallback)                     | `sla.test.ts`, `phase4-acceptance.test.ts`, `e2e/tests/phase4.spec.ts` |
+| **Limit 2, three new tickets, one eligible agent → the third waits until one goes to Waiting**              | `phase4-acceptance.test.ts`, `sla.test.ts` (distribution)              |
+| Eligibility: Access, a limit, queue in rights, Ready for email, below limit; fewest Open, then longest idle | `sla.test.ts`, `phase4-acceptance.test.ts`                             |
+| Backlog is FIFO; logging in, Waiting/Closed or reassigning retries it; concurrent runs never exceed the cap | `phase4-acceptance.test.ts`                                            |
+| UI: SLA icon on a ticket, Ready for email, SLA and working-hours settings                                   | `e2e/tests/phase4.spec.ts`                                             |
+
+What exists:
+
+- Domain: `sla/working-time.ts` (add/count working minutes in a timezone, exceptions),
+  `sla/sla.ts` (targets, deadlines, Waiting pause, outcome flags, icon state),
+  `sla/bank-holidays.ts` (GOV.UK parser, built-in England and Wales list),
+  `sla/distribution.ts` (eligibility, pick, backlog plan).
+- API: `/api/settings/slas` (CRUD, `basis-fields`), `/api/settings/time-groups` (CRUD,
+  `import-bank-holidays`), `/api/sla-options`, `/api/me/queues` (Ready for email); SLA and
+  working hours on categories, SLA on accounts; every ticket write recalculates its SLA in the
+  same transaction (`SlaService.refresh`); list rows and the ticket carry `sla`; the minute job
+  decides overdue outcomes and retries the distribution backlog.
+- Web: SLA icon in the Deadline column and the ticket header (tooltip with all times),
+  Ready for email in the header, Settings › SLAs and Settings › Working hours (weekly hours,
+  exceptions, Import UK bank holidays), SLA and working hours on categories, SLA on accounts.
+- Seed: "Office hours (demo)" and "Standard support (demo)" on Support. `pnpm db:setup:support`
+  adds "Ricoman office hours" (Mon–Thu 08:30–17:00, Fri 08:30–16:00, bank holidays) and
+  "Reply targets" (by enquiry type) on every Ricoman category.
+
+Deferred, deliberately:
+
+- Notifying the new owner on (re)assignment is Phase 5 (notifications).
+- Calls and chat as "responses" arrive with those channels (not planned for Ricoman).
+- Distribution runs in the API process with an advisory lock; it moves to a job queue if
+  volumes grow.
+
 ## Phase 3 — Email channel ✅
 
 Scope (spec 20): mailbox queues, inbound pipeline, threading, contact matching, composing,

@@ -15,7 +15,9 @@ import {
 import { alias } from 'drizzle-orm/pg-core';
 import type { AuthContext } from '../common/request-context';
 import { DB, type Db } from '../db/db';
-import { accounts, contacts, crmDatabases } from '../db/schema';
+import { accounts, contacts, crmDatabases, slaDefinitions } from '../db/schema';
+import { formError } from './form-errors';
+import { SlaService } from '../sla/sla.service';
 import { HistoryService } from '../history/history.service';
 import { applyCustomInput, filterFields, filterSql, likeTerm, pageOf, scopeSql, type ListQuery } from './crm-common';
 import { publicContact } from './contacts.service';
@@ -31,6 +33,8 @@ export interface AccountInput {
   phones?: string[];
   addresses?: Address[];
   customFields?: Record<string, unknown>;
+  /** Overrides the category SLA for this account's contacts (spec 8). */
+  slaId?: string | null;
 }
 
 type Row = typeof accounts.$inferSelect;
@@ -50,6 +54,7 @@ const flat = (r: Row) =>
       databaseId: r.databaseId,
       parentId: r.parentId,
       branchCode: r.branchCode,
+      slaId: r.slaId,
       emails: r.emails,
       phones: r.phones,
       addresses: r.addresses,
@@ -68,6 +73,7 @@ export class AccountsService {
     @Inject(DB) private readonly db: Db,
     @Inject(HistoryService) private readonly history: HistoryService,
     @Inject(CustomFieldsService) private readonly fields: CustomFieldsService,
+    @Inject(SlaService) private readonly sla: SlaService,
   ) {}
 
   async list(auth: AuthContext, q: ListQuery) {
@@ -212,6 +218,7 @@ export class AccountsService {
           name: input.name.trim(),
           parentId,
           branchCode: input.branchCode?.trim() || null,
+          slaId: await this.checkSla(input.slaId ?? null),
           ...details,
           customFields,
         })
@@ -253,7 +260,8 @@ export class AccountsService {
       input: input.customFields,
       isCreate: false,
     });
-    return this.db.transaction(async (tx) => {
+    const slaId = input.slaId !== undefined ? await this.checkSla(input.slaId) : before.slaId;
+    const out = await this.db.transaction(async (tx) => {
       const [row] = await tx
         .update(accounts)
         .set({
@@ -261,6 +269,7 @@ export class AccountsService {
           name: input.name?.trim() ?? before.name,
           parentId,
           branchCode: input.branchCode !== undefined ? input.branchCode?.trim() || null : before.branchCode,
+          slaId,
           ...details,
           customFields,
           updatedAt: new Date(),
@@ -270,6 +279,18 @@ export class AccountsService {
       await this.history.record(tx, auth, 'account', id, 'update', diffFields(flat(before), flat(row!)));
       return publicAccount(row!);
     });
+    if (slaId !== before.slaId) await this.sla.refreshAccount(id);
+    return out;
+  }
+
+  private async checkSla(id: string | null): Promise<string | null> {
+    if (!id) return null;
+    const [r] = await this.db
+      .select({ id: slaDefinitions.id })
+      .from(slaDefinitions)
+      .where(and(eq(slaDefinitions.id, id), isNull(slaDefinitions.deletedAt)));
+    if (!r) throw formError(['Unknown SLA.'], 'invalid_account');
+    return id;
   }
 
   async remove(auth: AuthContext, id: string) {
@@ -394,6 +415,7 @@ export function publicAccount(r: Row, parentName: string | null = null) {
     parentId: r.parentId,
     parentName,
     branchCode: r.branchCode,
+    slaId: r.slaId,
     path: accountPath(parentName, r.name, r.branchCode),
     emails: r.emails,
     phones: r.phones,

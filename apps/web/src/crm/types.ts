@@ -66,6 +66,7 @@ export interface Account {
   parentId: string | null;
   parentName: string | null;
   branchCode: string | null;
+  slaId?: string | null;
   path: string;
   emails: string[];
   phones: string[];

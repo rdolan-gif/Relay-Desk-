@@ -88,6 +88,7 @@ export const accountCreateSchema = z.object({
   name: z.string().trim().min(1).max(200),
   parentId: z.string().uuid().nullable().optional(),
   branchCode: z.string().trim().max(50).nullable().optional(),
+  slaId: z.string().uuid().nullable().optional(),
   emails: idList(20).optional(),
   phones: idList(20).optional(),
   addresses: z.array(addressSchema).max(50).optional(),

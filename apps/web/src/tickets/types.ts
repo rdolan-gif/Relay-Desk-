@@ -18,6 +18,8 @@ export interface Category {
   allowExternalComments: boolean;
   waitingRequiresReopen: boolean;
   defaultCrmDatabaseId: string | null;
+  slaId: string | null;
+  timeGroupId: string | null;
   formLayout: FormLayout;
   autofocusTab: string;
   statusIds: string[];
@@ -51,6 +53,8 @@ export interface Ticket {
   lastActivityAt: string;
   firstAnswerAt?: string | null;
   noReplyNeeded?: boolean;
+  closedAt?: string | null;
+  sla?: TicketSla | null;
   categoryTitle?: string;
   userName?: string | null;
   contactName?: string | null;
@@ -138,4 +142,18 @@ export interface Sidebar {
   teamViews: TicketView[];
   myViews: TicketView[];
   items: { viewId: string; position: number; folder: string | null; parentViewId: string | null }[];
+}
+
+export interface TicketSla {
+  firstAnswerDeadline: string | null;
+  firstAnswerAt: string | null;
+  firstAnswerMet: boolean | null;
+  solutionMet: boolean | null;
+  deadlineManual: boolean;
+  indicator: {
+    kind: 'response' | 'solution';
+    status: 'counting' | 'paused' | 'breached' | 'met' | 'missed';
+    due: string;
+    minutesLeft: number | null;
+  } | null;
 }

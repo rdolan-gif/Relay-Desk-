@@ -249,6 +249,7 @@ export class OutboundService {
             ...(t && !t.firstAnswerAt && !a.isAutomatic ? { firstAnswerAt: sentAt } : {}),
           })
           .where(eq(tickets.id, a.ticketId));
+        await this.tickets.refreshSla(tx, [a.ticketId]);
       });
     } catch (err) {
       // Delivery failure: the activity is marked Failed and keeps the reason (spec 11.4).

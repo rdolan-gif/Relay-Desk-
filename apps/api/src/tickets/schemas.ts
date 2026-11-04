@@ -20,6 +20,8 @@ export const categorySchema = z.object({
   allowExternalComments: z.boolean().default(false),
   waitingRequiresReopen: z.boolean().default(false),
   defaultCrmDatabaseId: z.string().uuid().nullable().default(null),
+  slaId: z.string().uuid().nullable().default(null),
+  timeGroupId: z.string().uuid().nullable().default(null),
   formLayout: layoutSchema.default({ sections: [] }),
   autofocusTab: z.enum(['form', 'attachments', 'templates']).default('form'),
   statusIds: z.array(z.string().uuid()).max(200).default([]),
