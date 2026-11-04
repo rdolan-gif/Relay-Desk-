@@ -24,6 +24,7 @@ import { AccessProfilesPage } from './pages/settings/AccessProfilesPage';
 import { AuditLogPage } from './pages/settings/AuditLogPage';
 import { RightsProfilesPage } from './pages/settings/RightsProfilesPage';
 import { UsersPage } from './pages/settings/UsersPage';
+import { BrandLogo } from './components/BrandLogo';
 import { GlobalSearch } from './components/GlobalSearch';
 import { AccountPage as CrmAccountPage } from './pages/crm/AccountPage';
 import { ContactPage } from './pages/crm/ContactPage';
@@ -93,11 +94,21 @@ function Shell() {
       navbar={{ width: 240, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       padding="md"
     >
-      <AppShell.Header>
+      <AppShell.Header style={{ borderBottom: '3px solid var(--mantine-color-amber-6)' }}>
         <Group h="100%" px="md" justify="space-between">
           <Group>
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" aria-label="Menu" />
-            <Title order={4}>{t.appName}</Title>
+            <Group gap="sm" wrap="nowrap">
+              <BrandLogo h={22} />
+              <Title
+                order={4}
+                c={scheme === 'dark' ? 'ricoman.2' : 'ricoman.7'}
+                visibleFrom="xs"
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {t.appName}
+              </Title>
+            </Group>
           </Group>
           {(crmLinks.length > 0 || can('tickets', 'read')) && <GlobalSearch />}
           <Group>

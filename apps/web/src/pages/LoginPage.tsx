@@ -2,6 +2,7 @@ import { Alert, Button, Center, Paper, PasswordInput, Stack, TextInput, Title } 
 import { useState, type FormEvent } from 'react';
 import { ApiError, api, setCsrfToken } from '../api';
 import { useAuth } from '../auth';
+import { BrandLogo } from '../components/BrandLogo';
 import { t } from '../i18n/en-GB';
 
 export function LoginPage() {
@@ -38,9 +39,10 @@ export function LoginPage() {
 
   return (
     <Center h="100vh" p="md">
-      <Paper withBorder p="xl" w={380} component="main">
+      <Paper withBorder p="xl" w={380} component="main" style={{ borderTop: '4px solid var(--mantine-color-amber-6)' }}>
         <form onSubmit={submit}>
           <Stack>
+            <BrandLogo h={40} />
             <Title order={2}>{t.login.title}</Title>
             {error && (
               <Alert color="red" role="alert">

@@ -111,7 +111,7 @@ export function UsersPage() {
               <Table.Td>{t.users.types[u.type]}</Table.Td>
               <Table.Td>{apName(u.accessProfileId)}</Table.Td>
               <Table.Td>{rpName(u.rightsProfileId)}</Table.Td>
-              <Table.Td>{u.isActive ? <Badge color="teal">Yes</Badge> : <Badge color="gray">No</Badge>}</Table.Td>
+              <Table.Td>{u.isActive ? <Badge color="green">Yes</Badge> : <Badge color="gray">No</Badge>}</Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>

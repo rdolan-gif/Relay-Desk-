@@ -11,7 +11,7 @@ export function useTicketMeta() {
 }
 
 export const STATE_COLOURS: Record<string, string> = {
-  open: 'teal',
+  open: 'green',
   waiting: 'yellow',
   closed: 'gray',
   archived: 'dark',

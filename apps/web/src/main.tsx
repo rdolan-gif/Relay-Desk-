@@ -12,10 +12,46 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { AuthProvider } from './auth';
 
-/** Original palette: deep teal primary. */
 dayjs.locale('en-gb');
 
-const theme = createTheme({ primaryColor: 'teal', defaultRadius: 'sm', fontFamily: 'system-ui, sans-serif' });
+/**
+ * Ricoman brand: blue #004a98 (primary, darker #0043a0) with amber #ef9e06 as the accent,
+ * on near-white #fefefe. Shade 6 is the exact brand colour.
+ */
+const theme = createTheme({
+  primaryColor: 'ricoman',
+  primaryShade: { light: 6, dark: 4 },
+  white: '#fefefe',
+  colors: {
+    ricoman: [
+      '#e6eef8',
+      '#ccdcf0',
+      '#99b9e1',
+      '#6696d2',
+      '#3373c3',
+      '#0d5aad',
+      '#004a98',
+      '#0043a0',
+      '#00346b',
+      '#002955',
+    ],
+    amber: [
+      '#fff6e3',
+      '#ffecc2',
+      '#fcd98a',
+      '#f8c552',
+      '#f4b228',
+      '#f1a514',
+      '#ef9e06',
+      '#d48b02',
+      '#bd7b00',
+      '#a36a00',
+    ],
+  },
+  defaultRadius: 'sm',
+  fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif',
+  headings: { fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif', fontWeight: '700' },
+});
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 10_000 } } });
 
 createRoot(document.getElementById('root')!).render(

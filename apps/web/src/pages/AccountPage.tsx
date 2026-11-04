@@ -236,7 +236,7 @@ function ApiTokenSection() {
             : t.account.apiNone}
         </Text>
         {token && (
-          <Alert color="teal">
+          <Alert color="green">
             <Code block>{token}</Code>
           </Alert>
         )}

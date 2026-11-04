@@ -42,7 +42,7 @@ export function RecordsTable({ endpoint, newRecordQuery }: { endpoint: string; n
                 <Table.Td>{r.recordTypeTitle}</Table.Td>
                 <Table.Td>{r.status ?? t.crm.none}</Table.Td>
                 <Table.Td>
-                  <Badge color={r.stage === 'open' ? 'teal' : 'gray'} variant="light">
+                  <Badge color={r.stage === 'open' ? 'green' : 'gray'} variant="light">
                     {t.crm.stages[r.stage]}
                   </Badge>
                 </Table.Td>

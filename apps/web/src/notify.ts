@@ -8,4 +8,4 @@ export const notifyError = (err: unknown) =>
     message: err instanceof Error ? err.message : String(err),
   });
 
-export const notifyOk = (message: string = t.common.saved) => notifications.show({ color: 'teal', message });
+export const notifyOk = (message: string = t.common.saved) => notifications.show({ color: 'green', message });

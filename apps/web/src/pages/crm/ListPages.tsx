@@ -141,7 +141,7 @@ export function RecordsPage() {
       key: 'stage',
       label: t.crm.stage,
       render: (r) => (
-        <Badge color={r.stage === 'open' ? 'teal' : 'gray'} variant="light">
+        <Badge color={r.stage === 'open' ? 'green' : 'gray'} variant="light">
           {t.crm.stages[r.stage]}
         </Badge>
       ),
