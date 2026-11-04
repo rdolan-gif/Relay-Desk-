@@ -112,6 +112,14 @@ export async function installDemo() {
     if (/^\/api\/tickets\/\d+\/presence\/leave$/.test(u.pathname)) return json(200, { ok: true });
     if (u.pathname.startsWith('/api/me/notifications')) return json(200, { unread: 0 });
     if (u.pathname === '/api/auth/logout') return json(204, undefined);
+    // My views (reorder, pin, remove) is kept in memory so the drag and swipe can be tried.
+    const sidebar = data['/api/tickets/views'];
+    if (method === 'PUT' && u.pathname === '/api/tickets/views/sidebar' && sidebar) {
+      const { items } = JSON.parse(String(init?.body ?? '{}')) as { items: Record<string, unknown>[] };
+      const body = sidebar.body as { items: unknown[] };
+      body.items = items.map((i, position) => ({ ...i, position }));
+      return json(200, body);
+    }
     return json(403, READ_ONLY);
   };
 

@@ -110,7 +110,10 @@ function Row(props: {
           bottom={0}
           w={REVEAL}
           justify="center"
-          style={{ background: 'var(--mantine-color-red-filled)' }}
+          style={{
+            background: 'var(--mantine-color-red-filled)',
+            visibility: props.revealed || dx !== 0 ? 'visible' : 'hidden', // no red edge peeking out at rest
+          }}
           aria-hidden={!props.revealed}
         >
           <ActionIcon
