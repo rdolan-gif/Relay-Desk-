@@ -185,9 +185,16 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
       })
       .returning();
     const visible = [...SHARED, ...LABELS, ...(personal ? [personal] : [])];
-    await db
-      .insert(rightsProfileCategories)
-      .values(visible.map((t) => ({ rightsProfileId: rp!.id, categoryId: cat[t]!, access: true })));
+    await db.insert(rightsProfileCategories).values(
+      visible.map((t) => ({
+        rightsProfileId: rp!.id,
+        categoryId: cat[t]!,
+        access: true,
+        // Enquiries are shared out automatically to whoever has the fewest open, with no
+        // cap (owner O-16). Agents then merge or reassign them.
+        distribute: t === 'Enquiries',
+      })),
+    );
     await db
       .insert(rightsProfileTicketViews)
       .values(visible.map((t) => ({ rightsProfileId: rp!.id, viewId: views[t]! })));

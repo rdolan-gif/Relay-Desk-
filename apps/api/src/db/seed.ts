@@ -402,11 +402,7 @@ async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<
   const intake = await category('Intake', { groupName: 'Back office' }, [st.resolved]);
   // Demo SLA (spec 8): office hours and per-priority targets on Support.
   const officeHours = await seedTimeGroup(db, 'Office hours (demo)', {
-    week: [
-      ...Array.from({ length: 5 }, () => [{ start: '09:00', end: '17:00' }]),
-      [],
-      [],
-    ],
+    week: [...Array.from({ length: 5 }, () => [{ start: '09:00', end: '17:00' }]), [], []],
   });
   const standardSla = await seedSla(db, 'Standard support (demo)', {
     unit: 'hours',
@@ -433,7 +429,13 @@ async function seedHelpdesk(db: Db, standardAgentRightsId: string, crm: Awaited<
   ] as const) {
     await db
       .insert(rightsProfileCategories)
-      .values({ rightsProfileId: standardAgentRightsId, categoryId, access, distributionLimit: limit })
+      .values({
+        rightsProfileId: standardAgentRightsId,
+        categoryId,
+        access,
+        distribute: limit !== null,
+        distributionLimit: limit,
+      })
       .onConflictDoNothing();
   }
 
@@ -537,7 +539,10 @@ export async function seedSla(
     .from(slaDefinitions)
     .where(and(eq(slaDefinitions.title, title), isNull(slaDefinitions.deletedAt)));
   if (existing) return existing.id;
-  const [row] = await db.insert(slaDefinitions).values({ title, ...v }).returning();
+  const [row] = await db
+    .insert(slaDefinitions)
+    .values({ title, ...v })
+    .returning();
   return row!.id;
 }
 

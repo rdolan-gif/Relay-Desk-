@@ -425,6 +425,7 @@ describe('distribution (spec 9)', () => {
     userId,
     active: true,
     categoryAccess: true,
+    distribute: true,
     limit: 2,
     queueInRights: true,
     loggedIn: true,
@@ -438,12 +439,22 @@ describe('distribution (spec 9)', () => {
     for (const over of [
       { active: false },
       { categoryAccess: false },
-      { limit: null },
+      { distribute: false },
       { queueInRights: false },
       { loggedIn: false },
       { openCount: 2 },
     ])
       expect(isEligible(agent('a', over)), JSON.stringify(over)).toBe(false);
+  });
+
+  it('with no cap, everyone ready gets tickets and the one with the fewest Open tickets goes first (owner O-16)', () => {
+    expect(isEligible(agent('a', { limit: null, openCount: 500 }))).toBe(true);
+    const plan = planDistribution(
+      [1, 2, 3, 4],
+      [agent('a', { limit: null, openCount: 3 }), agent('b', { limit: null, openCount: 1 })],
+      at(2026, 11, 10, 10),
+    );
+    expect(plan.map((p) => p.userId)).toEqual(['b', 'b', 'a', 'b']);
   });
 
   it('the agent with the fewest Open tickets wins; ties go to the longest since their last assignment', () => {

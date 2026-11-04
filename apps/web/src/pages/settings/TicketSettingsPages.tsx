@@ -193,7 +193,10 @@ export function CategoriesPage() {
     queryFn: () => api<TicketStatus[]>('GET', '/settings/ticket-statuses'),
   });
   const list = useQuery({ queryKey: ['categories'], queryFn: () => api<Category[]>('GET', '/settings/categories') });
-  const slas = useQuery({ queryKey: ['sla-options'], queryFn: () => api<{ id: string; title: string }[]>('GET', '/sla-options') });
+  const slas = useQuery({
+    queryKey: ['sla-options'],
+    queryFn: () => api<{ id: string; title: string }[]>('GET', '/sla-options'),
+  });
   const timeGroups = useQuery({
     queryKey: ['time-group-options'],
     queryFn: () => api<{ id: string; title: string }[]>('GET', '/sla-options/time-groups'),
@@ -273,7 +276,10 @@ export function CategoriesPage() {
             <Group grow>
               <Select
                 label={t.sla.category}
-                data={[{ value: '', label: t.sla.none }, ...(slas.data ?? []).map((x) => ({ value: x.id, label: x.title }))]}
+                data={[
+                  { value: '', label: t.sla.none },
+                  ...(slas.data ?? []).map((x) => ({ value: x.id, label: x.title })),
+                ]}
                 value={draft.slaId ?? ''}
                 allowDeselect={false}
                 onChange={(v) => set({ slaId: v || null })}

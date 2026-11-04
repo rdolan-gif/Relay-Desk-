@@ -68,7 +68,10 @@ export function AccountPage() {
     queryFn: () => api<Contact[]>('GET', `/crm/accounts/${id}/contacts`),
     enabled: !isNew,
   });
-  const slas = useQuery({ queryKey: ['sla-options'], queryFn: () => api<{ id: string; title: string }[]>('GET', '/sla-options') });
+  const slas = useQuery({
+    queryKey: ['sla-options'],
+    queryFn: () => api<{ id: string; title: string }[]>('GET', '/sla-options'),
+  });
   const [draft, setDraft] = useState<Draft | null>(null);
   const [viewAt, setViewAt] = useState<string | null>(null);
 
@@ -209,7 +212,10 @@ export function AccountPage() {
                     <Select
                       label={t.sla.account}
                       description={t.sla.accountHelp}
-                      data={[{ value: '', label: t.sla.inherit }, ...slas.data!.map((x) => ({ value: x.id, label: x.title }))]}
+                      data={[
+                        { value: '', label: t.sla.inherit },
+                        ...slas.data!.map((x) => ({ value: x.id, label: x.title })),
+                      ]}
                       value={shown.slaId ?? ''}
                       disabled={readOnly}
                       allowDeselect={false}

@@ -41,6 +41,7 @@ const rightsSchema = z.object({
           z.object({
             categoryId: z.string().uuid(),
             access: z.boolean().default(true),
+            distribute: z.boolean().default(false),
             distributionLimit: z.number().int().min(1).max(1000).nullable().default(null),
           }),
         )

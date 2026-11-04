@@ -47,7 +47,7 @@ export interface RightsProfileDto {
   editableRightsProfiles: 'all' | string[];
   crmDatabases: 'all' | string[];
   crmRecordTypes: 'all' | string[];
-  categories: 'all' | { categoryId: string; access: boolean; distributionLimit: number | null }[];
+  categories: 'all' | { categoryId: string; access: boolean; distribute: boolean; distributionLimit: number | null }[];
   ticketViews: 'all' | string[];
   mailboxes: 'all' | string[];
 }

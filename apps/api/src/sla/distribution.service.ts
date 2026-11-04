@@ -132,6 +132,7 @@ export class DistributionService {
         active: u.isActive,
         categoryAccess: rights.categories === 'all' || !!link?.access,
         // "All categories" means no distribution limit (Q-P2-5), so no auto-distribution.
+        distribute: !!link?.distribute,
         limit: link?.distributionLimit ?? null,
         queueInRights: inRights.length > 0,
         loggedIn: logins.some((l) => l.userId === u.id && inRights.includes(l.queueId)),

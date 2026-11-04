@@ -182,7 +182,7 @@ describe('email channel (spec 11)', () => {
       expect((await agent.get(`/api/tickets/${tid(first)}`)).body.firstAnswerAt).toBeTruthy();
     });
 
-    it('a new email not linked to a ticket creates one: Closed, Low, the sender as User, the matched contact', async () => {
+    it('a new email not linked to a ticket creates one: Open (owner O-15), Low, the sender as User, the matched contact', async () => {
       const res = await agent.post('/api/emails', {
         queueId: mailbox,
         kind: 'new',
@@ -192,7 +192,7 @@ describe('email channel (spec 11)', () => {
       });
       expect(res.status, JSON.stringify(res.body)).toBe(201);
       const t = (await agent.get(`/api/tickets/${res.body.ticketId}`)).body;
-      expect(t).toMatchObject({ title: 'Your quote', state: 'closed', priority: 'low', userId: agent.userId });
+      expect(t).toMatchObject({ title: 'Your quote', state: 'open', priority: 'low', userId: agent.userId });
       expect(t.contactCard.name).toBe('Sam Smith');
       expect(t.category.title).toBe('Support');
     });

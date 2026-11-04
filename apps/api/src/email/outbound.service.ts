@@ -264,7 +264,7 @@ export class OutboundService {
 
   /**
    * A new email not linked to a ticket creates one (spec 6.3): title = subject, category =
-   * the mailbox's, state Closed, priority Low, user = sender, contact = matched recipient;
+   * the mailbox's, state Open (owner O-15: the system never closes a ticket), priority Low, user = sender, contact = matched recipient;
    * outgoing routing rules then apply.
    */
   private async createTicketForNewEmail(
@@ -292,7 +292,7 @@ export class OutboundService {
     const created = await this.tickets.createSystemTicket(this.db, auth, {
       title: subject,
       categoryId: routing.actions.categoryId ?? queue.defaultCategoryId,
-      state: routing.actions.state ?? 'closed',
+      state: routing.actions.state ?? 'open',
       priority: routing.actions.priority ?? 'low',
       userId: routing.actions.userId !== undefined ? routing.actions.userId : auth.user.id,
       contactId: matched?.id ?? null,

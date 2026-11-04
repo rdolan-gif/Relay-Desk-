@@ -244,6 +244,17 @@ describe('routing rules (spec 11.3, owner S-3)', () => {
       matchedRuleIds: ['noreply', 'po', 'high'],
     });
   });
+  it('rules never close or archive a ticket; only an agent does (owner O-15)', () => {
+    const closes = rule('closer', {
+      all: [{ field: 'subject', op: 'contains', value: 'invoice' }],
+      actions: { state: 'closed' },
+    });
+    expect(validateRule(closes)[0]).toMatch(/cannot close/);
+    const r = applyRoutingRules([closes], { ...input, subject: 'Invoice 12' });
+    expect(r.matchedRuleIds).toEqual(['closer']);
+    expect(r.actions.state).toBeUndefined();
+  });
+
   it('a rule with no conditions never matches; invalid rules are refused on save', () => {
     expect(applyRoutingRules([rule('empty', { actions: { priority: 'high' } })], input).matchedRuleIds).toEqual([]);
     expect(validateRule({ title: '', all: [], any: [] })).toHaveLength(2);

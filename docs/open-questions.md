@@ -87,8 +87,8 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 | ------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
 | Q-P4-1  | Ricoman solution target | The reply targets (2/4/8 h) are the SLA's Response. The spec needs a Solution time too; it is set to 40 working hours (about a week) for now. Change it in Settings › SLAs. | **Open** |
 | Q-P4-2  | Reply targets (O-11)    | Built as proposed: an SLA based on the "Enquiry type" field. Routing rules set the type; agents can change it and the target moves. Unknown or empty values use 8 hours.    | Decided  |
-| Q-P4-3  | Automatic distribution  | Ricoman's setup sets no distribution limits, so nothing is handed out automatically until a limit is set on a rights profile (e.g. Enquiries, limit 5). Do you want it?     | **Open** |
-| Q-P4-4  | Ready for email         | A toggle per mailbox in the header. Signing out turns it off. Being on a break does not stop distribution (spec 9).                                                         | Assumed  |
+| Q-P4-3  | Automatic distribution  | Superseded by O-16: Enquiries are assigned automatically with no cap. Each category on a rights profile has "Assign automatically" and an optional "Most open at once".     | Decided  |
+| Q-P4-4  | Ready for email         | A toggle per mailbox in the header. It stays on until the person turns it off (O-16), so turn it off before holidays. Breaks do not stop distribution (spec 9).             | Decided  |
 | Q-P4-5  | "All categories" rights | Means no distribution limit, so those users (e.g. administrators) never receive tickets automatically.                                                                      | Assumed  |
 | Q-P4-6  | Branch SLA              | A branch without its own SLA uses its company's.                                                                                                                            | Assumed  |
 | Q-P4-7  | Bank holidays           | England and Wales list from GOV.UK; when GOV.UK can't be reached a built-in list (2026–2027) is used. Imports add future dates only and never overwrite an existing date.   | Assumed  |
@@ -134,6 +134,13 @@ Status: **Open** = owner input wanted · **Assumed** = built as described until 
 | O-12 | Filtering                     | No automatic filtering for now: every email becomes a ticket. Some emails need action and some are FYI; agents decide.                                                                                  | Phase 3    |
 | O-13 | Hosting                       | Run on the existing server that hosts quotes.ricoman.com, if it has room.                                                                                                                               | Deployment |
 | O-14 | Branding                      | Ricoman colours, fonts and logos to be applied once the assets are supplied; not blocking.                                                                                                              | Any time   |
+
+## Owner answers, 04/11/2026 (third round)
+
+| #    | Topic                | Decision                                                                                                                                                                                                                                                                                         | Status |
+| ---- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| O-15 | Closing tickets      | The system never closes a ticket; only an agent does, so no enquiry is lost. A new outgoing email now opens its ticket as Open (spec 6.3 said Closed), and routing rules can no longer close tickets. Deadlines never close anything; they only show a ticket as overdue.                        | Built  |
+| O-16 | Automatic assignment | New Enquiries go automatically to whoever has the fewest open ones, with **no cap**. Agents then merge the ticket into the right one or reassign it (e.g. to Heather if she is named). Ready for email stays on until the person turns it off (e.g. for holidays), not just until they sign out. | Built  |
 
 ## Proposed (awaiting owner confirmation)
 

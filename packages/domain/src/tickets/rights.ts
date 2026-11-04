@@ -2,6 +2,9 @@
 export interface CategoryRight {
   categoryId: string;
   access: boolean;
+  /** Hand new mailbox tickets in this category out automatically (spec 9). */
+  distribute: boolean;
+  /** Most Open tickets at once; null = no cap (owner O-16). */
   distributionLimit: number | null;
 }
 

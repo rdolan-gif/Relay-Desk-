@@ -9,7 +9,9 @@ export interface DistributionCandidate {
   active: boolean;
   /** Rights include the category with Access = Yes. */
   categoryAccess: boolean;
-  /** Distribution limit on that category link; null = no auto-distribution. */
+  /** Distribution is switched on for that category link… */
+  distribute: boolean;
+  /** …with this cap on Open tickets; null = no cap (owner O-16). */
   limit: number | null;
   /** The category is the default category of a mailbox queue in their rights… */
   queueInRights: boolean;
@@ -24,11 +26,10 @@ export function isEligible(c: DistributionCandidate): boolean {
   return (
     c.active &&
     c.categoryAccess &&
-    c.limit !== null &&
-    c.limit > 0 &&
+    c.distribute &&
     c.queueInRights &&
     c.loggedIn &&
-    c.openCount < c.limit
+    (c.limit === null || c.openCount < c.limit)
   );
 }
 

@@ -186,8 +186,8 @@ describe('parent/child (spec 6.4)', () => {
 describe('category rights (spec 4)', () => {
   const rights = {
     categories: [
-      { categoryId: 'support', access: true, distributionLimit: 5 },
-      { categoryId: 'intake', access: false, distributionLimit: null },
+      { categoryId: 'support', access: true, distribute: true, distributionLimit: 5 },
+      { categoryId: 'intake', access: false, distribute: false, distributionLimit: null },
     ],
     ticketViews: [],
     mailboxes: [],

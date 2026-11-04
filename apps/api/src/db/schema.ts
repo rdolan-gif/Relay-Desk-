@@ -471,6 +471,8 @@ export const rightsProfileCategories = pgTable(
       .notNull()
       .references(() => categories.id, { onDelete: 'cascade' }),
     access: boolean('access').notNull().default(true),
+    /** Automatic distribution on (spec 9); the limit is optional (owner O-16: no cap). */
+    distribute: boolean('distribute').notNull().default(false),
     distributionLimit: integer('distribution_limit'),
   },
   (t) => [primaryKey({ columns: [t.rightsProfileId, t.categoryId] })],

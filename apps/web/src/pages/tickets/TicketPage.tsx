@@ -624,7 +624,11 @@ export function TicketPage() {
                                   <Button
                                     size="compact-xs"
                                     variant="light"
-                                    onClick={() => action.mutate(() => api('POST', `/tickets/${id}/activities/${a.id}/move`, { targetTicketId: sid }))}
+                                    onClick={() =>
+                                      action.mutate(() =>
+                                        api('POST', `/tickets/${id}/activities/${a.id}/move`, { targetTicketId: sid }),
+                                      )
+                                    }
                                   >
                                     {t.email.moveHere(sid)}
                                   </Button>
@@ -640,7 +644,11 @@ export function TicketPage() {
                     ))}
                   {activities.data?.map((a) =>
                     a.type === 'email' && a.email ? (
-                      <EmailActivity key={a.id} a={a} onCompose={(mode, source) => !archived && setCompose({ mode, source })} />
+                      <EmailActivity
+                        key={a.id}
+                        a={a}
+                        onCompose={(mode, source) => !archived && setCompose({ mode, source })}
+                      />
                     ) : (
                       <ActivityItem
                         key={a.id}
@@ -675,11 +683,15 @@ export function TicketPage() {
                         size="xs"
                         variant="light"
                         onClick={() => {
-                          const lastIn = [...(activities.data ?? [])].reverse().find((x) => x.type === 'email' && x.direction === 'in');
+                          const lastIn = [...(activities.data ?? [])]
+                            .reverse()
+                            .find((x) => x.type === 'email' && x.direction === 'in');
                           setCompose(lastIn ? { mode: 'reply', source: lastIn } : { mode: 'new', source: null });
                         }}
                       >
-                        {activities.data?.some((x) => x.type === 'email' && x.direction === 'in') ? t.email.reply : t.email.newEmail}
+                        {activities.data?.some((x) => x.type === 'email' && x.direction === 'in')
+                          ? t.email.reply
+                          : t.email.newEmail}
                       </Button>
                     </Group>
                   )}

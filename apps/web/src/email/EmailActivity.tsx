@@ -12,7 +12,15 @@ const addr = (a: MailAddress) => (a.name ? `${a.name} <${a.address}>` : a.addres
  * One email in the ticket feed. The (already sanitised) HTML is shown in a sandboxed
  * frame with scripts disabled, so email styles can't leak into the app.
  */
-export function EmailActivity({ a, onCompose, actions }: { a: Activity; onCompose: (mode: ComposeMode, source: Activity) => void; actions?: React.ReactNode }) {
+export function EmailActivity({
+  a,
+  onCompose,
+  actions,
+}: {
+  a: Activity;
+  onCompose: (mode: ComposeMode, source: Activity) => void;
+  actions?: React.ReactNode;
+}) {
   const { me } = useAuth();
   const e = a.email!;
   const frame = useRef<HTMLIFrameElement>(null);
@@ -32,7 +40,14 @@ export function EmailActivity({ a, onCompose, actions }: { a: Activity; onCompos
   const srcDoc = `<!doctype html><html><head><base target="_blank"><style>body{font:14px/1.5 system-ui,sans-serif;margin:0;color:#16201f;word-wrap:break-word}img{max-width:100%;height:auto}blockquote{border-left:3px solid #ccd;margin:0 0 0 4px;padding-left:10px;color:#555}</style></head><body>${a.bodyHtml}</body></html>`;
 
   return (
-    <Paper withBorder p="sm" id={`activity-${a.id}`} style={{ borderLeft: `4px solid ${a.direction === 'in' ? 'var(--mantine-color-amber-6)' : 'var(--mantine-primary-color-filled)'}` }}>
+    <Paper
+      withBorder
+      p="sm"
+      id={`activity-${a.id}`}
+      style={{
+        borderLeft: `4px solid ${a.direction === 'in' ? 'var(--mantine-color-amber-6)' : 'var(--mantine-primary-color-filled)'}`,
+      }}
+    >
       <Stack gap={4}>
         <Group justify="space-between" wrap="nowrap" align="flex-start">
           <Stack gap={0} style={{ minWidth: 0 }}>
@@ -47,12 +62,24 @@ export function EmailActivity({ a, onCompose, actions }: { a: Activity; onCompos
                 {formatDateTime(a.createdAt, me!.user.timezone)}
               </Text>
               {a.direction === 'out' && (
-                <Badge size="xs" color={a.status === 'failed' ? 'red' : a.status === 'sent' ? 'green' : 'gray'} variant="light">
+                <Badge
+                  size="xs"
+                  color={a.status === 'failed' ? 'red' : a.status === 'sent' ? 'green' : 'gray'}
+                  variant="light"
+                >
                   {t.email.statuses[a.status] ?? a.status}
                 </Badge>
               )}
-              {a.isAutomatic && <Badge size="xs" variant="outline">{t.email.automatic}</Badge>}
-              {automated && <Badge size="xs" variant="outline" color="gray">{t.email.automated}</Badge>}
+              {a.isAutomatic && (
+                <Badge size="xs" variant="outline">
+                  {t.email.automatic}
+                </Badge>
+              )}
+              {automated && (
+                <Badge size="xs" variant="outline" color="gray">
+                  {t.email.automated}
+                </Badge>
+              )}
             </Group>
             <Text size="xs" c="dimmed" truncate>
               {t.email.to}: {e.to.map(addr).join(', ')}
@@ -70,7 +97,13 @@ export function EmailActivity({ a, onCompose, actions }: { a: Activity; onCompos
           </Text>
         )}
         <div style={{ maxHeight: expanded ? undefined : 400, overflow: 'hidden', position: 'relative' }}>
-          <iframe ref={frame} title={e.subject || 'Email'} sandbox="allow-same-origin allow-popups" srcDoc={srcDoc} style={{ width: '100%', height, border: 0, background: 'white' }} />
+          <iframe
+            ref={frame}
+            title={e.subject || 'Email'}
+            sandbox="allow-same-origin allow-popups"
+            srcDoc={srcDoc}
+            style={{ width: '100%', height, border: 0, background: 'white' }}
+          />
         </div>
         {height > 400 && (
           <Group>

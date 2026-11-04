@@ -81,7 +81,12 @@ export class PermissionsService {
     const cats = rp.allCategories
       ? 'all'
       : (await tx.select().from(rightsProfileCategories).where(eq(rightsProfileCategories.rightsProfileId, rp.id))).map(
-          (c) => ({ categoryId: c.categoryId, access: c.access, distributionLimit: c.distributionLimit }),
+          (c) => ({
+            categoryId: c.categoryId,
+            access: c.access,
+            distribute: c.distribute,
+            distributionLimit: c.distributionLimit,
+          }),
         );
     const views = rp.allTicketViews
       ? 'all'

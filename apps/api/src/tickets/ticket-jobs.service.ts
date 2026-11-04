@@ -39,7 +39,9 @@ export class TicketJobsService implements OnModuleInit, OnApplicationShutdown {
       // Safety net for distribution (spec 9); runs are cheap when there is no backlog.
       const assigned = await this.distribution.run(undefined, now);
       if (reopened.length || archived.length || assigned.length)
-        this.log.log(`reopened ${reopened.length}, archived ${archived.length}, distributed ${assigned.length}, SLA checked ${decided}`);
+        this.log.log(
+          `reopened ${reopened.length}, archived ${archived.length}, distributed ${assigned.length}, SLA checked ${decided}`,
+        );
     } catch (err) {
       this.log.error(err);
     }

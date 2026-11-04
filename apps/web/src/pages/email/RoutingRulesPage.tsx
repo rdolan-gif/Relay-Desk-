@@ -271,7 +271,7 @@ export function RoutingRulesPage() {
               />
               <Select
                 label={t.routing.state}
-                data={keep(['open', 'waiting', 'closed'].map((value) => ({ value, label: t.tickets.states[value]! })))}
+                data={keep(['open', 'waiting'].map((value) => ({ value, label: t.tickets.states[value]! })))}
                 value={draft.actions.state ?? ''}
                 onChange={(v) => setAction({ state: (v || undefined) as Draft['actions']['state'] })}
               />

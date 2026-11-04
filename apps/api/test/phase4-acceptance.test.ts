@@ -313,7 +313,7 @@ describe('Phase 4 acceptance', () => {
       const [u] = await db.select().from(users).where(eq(users.email, 'agent@relaydesk.local'));
       await db
         .update(rightsProfileCategories)
-        .set({ distributionLimit: limit })
+        .set({ distribute: limit !== null, distributionLimit: limit })
         .where(
           and(
             eq(rightsProfileCategories.rightsProfileId, u!.rightsProfileId!),
@@ -350,13 +350,33 @@ describe('Phase 4 acceptance', () => {
       expect((await row(second.ticketId)).userId).toBeNull();
     });
 
-    it('no limit means no automatic distribution, and signing out stops it', async () => {
+    it('with distribution switched off nothing is assigned; Ready stays on after signing out until turned off (owner O-16)', async () => {
       await setLimit(null);
       await agent.put('/api/me/queues', { queueIds: [mailbox()] });
       expect((await row((await mail(1)).ticketId)).userId).toBeNull();
       await setLimit(3);
       await agent.post('/api/auth/logout');
-      expect((await row((await mail(2)).ticketId)).userId).toBeNull();
+      expect((await row((await mail(2)).ticketId)).userId).toBe(agent.userId);
+      const again = await loginAs(ctx.app, 'agent@relaydesk.local');
+      await again.put('/api/me/queues', { queueIds: [] });
+      expect((await row((await mail(3)).ticketId)).userId).toBeNull();
+    });
+
+    it('with no cap, enquiries go to whoever has the fewest open, however many they have (owner O-16)', async () => {
+      const [u] = await db.select().from(users).where(eq(users.email, 'agent@relaydesk.local'));
+      await db
+        .update(rightsProfileCategories)
+        .set({ distribute: true, distributionLimit: null })
+        .where(
+          and(
+            eq(rightsProfileCategories.rightsProfileId, u!.rightsProfileId!),
+            eq(rightsProfileCategories.categoryId, support()),
+          ),
+        );
+      await agent.put('/api/me/queues', { queueIds: [mailbox()] });
+      const got = [];
+      for (let n = 1; n <= 8; n++) got.push((await row((await mail(n)).ticketId)).userId);
+      expect(got.every((x) => x === agent.userId)).toBe(true);
     });
 
     it('reassigning frees a slot; manually created tickets are never distributed', async () => {

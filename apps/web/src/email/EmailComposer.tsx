@@ -1,4 +1,16 @@
-import { ActionIcon, Badge, Button, FileButton, Group, Paper, Select, Stack, TagsInput, Text, TextInput } from '@mantine/core';
+import {
+  ActionIcon,
+  Badge,
+  Button,
+  FileButton,
+  Group,
+  Paper,
+  Select,
+  Stack,
+  TagsInput,
+  Text,
+  TextInput,
+} from '@mantine/core';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { replyRecipients, replySubject, signatureHtml } from '@relay-desk/domain';
@@ -36,11 +48,24 @@ export function EmailComposer({ mode, ticket, source, formDirty, saveForm, onSen
     let to: string[] = [];
     let cc: string[] = [];
     if (e && (mode === 'reply' || mode === 'reply_all')) {
-      const r = replyRecipients({ kind: mode, from: source!.direction === 'out' ? e.to : [e.from], replyTo: source!.direction === 'out' ? [] : e.replyTo, to: e.to, cc: e.cc, ourAddresses: ours });
+      const r = replyRecipients({
+        kind: mode,
+        from: source!.direction === 'out' ? e.to : [e.from],
+        replyTo: source!.direction === 'out' ? [] : e.replyTo,
+        to: e.to,
+        cc: e.cc,
+        ourAddresses: ours,
+      });
       to = r.to;
       cc = r.cc;
     }
-    const subject = ticket ? replySubject(mode === 'forward' ? 'forward' : mode === 'new' ? 'new' : 'reply', e?.subject ?? ticket.title, ticket.id) : '';
+    const subject = ticket
+      ? replySubject(
+          mode === 'forward' ? 'forward' : mode === 'new' ? 'new' : 'reply',
+          e?.subject ?? ticket.title,
+          ticket.id,
+        )
+      : '';
     const sig = signatureHtml(me!.user.signature);
     const quote =
       source && mode !== 'new'
@@ -59,18 +84,28 @@ export function EmailComposer({ mode, ticket, source, formDirty, saveForm, onSen
   const [subject, setSubject] = useState(initial.subject);
   const [body, setBody] = useState(initial.body);
   const [editorKey, setEditorKey] = useState(0);
-  const [files, setFiles] = useState<{ id: string; filename: string; size: number }[]>(mode === 'forward' ? (source?.attachments ?? []).map((a) => ({ id: a.id, filename: a.filename, size: a.size })) : []);
+  const [files, setFiles] = useState<{ id: string; filename: string; size: number }[]>(
+    mode === 'forward'
+      ? (source?.attachments ?? []).map((a) => ({ id: a.id, filename: a.filename, size: a.size }))
+      : [],
+  );
 
   const queueId = from && mailboxes.data?.some((m) => m.id === from) ? from : (mailboxes.data?.[0]?.id ?? null);
   const templates = useQuery({
     queryKey: ['templates', 'reply', queueId, ticket?.categoryId],
-    queryFn: () => api<EmailTemplate[]>('GET', `/templates?kind=reply${queueId ? `&queueId=${queueId}` : ''}${ticket ? `&categoryId=${ticket.categoryId}` : ''}`),
+    queryFn: () =>
+      api<EmailTemplate[]>(
+        'GET',
+        `/templates?kind=reply${queueId ? `&queueId=${queueId}` : ''}${ticket ? `&categoryId=${ticket.categoryId}` : ''}`,
+      ),
   });
 
   const insertTemplate = async (id: string | null) => {
     if (!id) return;
     try {
-      const r = await api<{ subject: string | null; bodyHtml: string }>('POST', `/templates/${id}/render`, { ticketId: ticket?.id ?? null });
+      const r = await api<{ subject: string | null; bodyHtml: string }>('POST', `/templates/${id}/render`, {
+        ticketId: ticket?.id ?? null,
+      });
       setBody(`${r.bodyHtml}${body}`);
       setEditorKey((k) => k + 1);
       if (r.subject && !subject.trim()) setSubject(r.subject);
@@ -117,12 +152,22 @@ export function EmailComposer({ mode, ticket, source, formDirty, saveForm, onSen
         <Group grow align="flex-end">
           <Select
             label={t.email.from}
-            data={(mailboxes.data ?? []).map((m) => ({ value: m.id, label: `${m.senderName || m.title} <${m.address}>` }))}
+            data={(mailboxes.data ?? []).map((m) => ({
+              value: m.id,
+              label: `${m.senderName || m.title} <${m.address}>`,
+            }))}
             value={queueId}
             allowDeselect={false}
             onChange={setFrom}
           />
-          <Select label={t.email.insertTemplate} placeholder={t.email.insertTemplate} data={(templates.data ?? []).map((tp) => ({ value: tp.id, label: tp.title }))} value={null} onChange={insertTemplate} searchable />
+          <Select
+            label={t.email.insertTemplate}
+            placeholder={t.email.insertTemplate}
+            data={(templates.data ?? []).map((tp) => ({ value: tp.id, label: tp.title }))}
+            value={null}
+            onChange={insertTemplate}
+            searchable
+          />
         </Group>
         <TagsInput label={t.email.to} value={to} onChange={setTo} splitChars={[',', ' ', ';']} clearable />
         {showCc ? (
@@ -137,7 +182,12 @@ export function EmailComposer({ mode, ticket, source, formDirty, saveForm, onSen
             </Button>
           </Group>
         )}
-        <TextInput label={t.email.subject} value={subject} onChange={(e) => setSubject(e.currentTarget.value)} required />
+        <TextInput
+          label={t.email.subject}
+          value={subject}
+          onChange={(e) => setSubject(e.currentTarget.value)}
+          required
+        />
         <RichTextEditor key={editorKey} label={t.email.body} value={body} onChange={setBody} minHeight={160} />
         <Group gap="xs">
           {files.map((f) => (
@@ -145,7 +195,12 @@ export function EmailComposer({ mode, ticket, source, formDirty, saveForm, onSen
               key={f.id}
               variant="light"
               rightSection={
-                <ActionIcon size="xs" variant="transparent" aria-label={`Remove ${f.filename}`} onClick={() => setFiles(files.filter((x) => x.id !== f.id))}>
+                <ActionIcon
+                  size="xs"
+                  variant="transparent"
+                  aria-label={`Remove ${f.filename}`}
+                  onClick={() => setFiles(files.filter((x) => x.id !== f.id))}
+                >
                   ✕
                 </ActionIcon>
               }
@@ -176,7 +231,11 @@ export function EmailComposer({ mode, ticket, source, formDirty, saveForm, onSen
             <Button variant="default" onClick={onCancel}>
               {t.email.discard}
             </Button>
-            <Button loading={send.isPending} disabled={!queueId || !to.length || !subject.trim()} onClick={() => send.mutate()}>
+            <Button
+              loading={send.isPending}
+              disabled={!queueId || !to.length || !subject.trim()}
+              onClick={() => send.mutate()}
+            >
               {formDirty ? t.email.saveAndSend : t.email.send}
             </Button>
           </Group>

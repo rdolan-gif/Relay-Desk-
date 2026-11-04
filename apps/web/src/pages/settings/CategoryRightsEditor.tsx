@@ -4,7 +4,7 @@ import { api } from '../../api';
 import { t } from '../../i18n/en-GB';
 import type { Category } from '../../tickets/types';
 
-type Value = 'all' | { categoryId: string; access: boolean; distributionLimit: number | null }[];
+type Value = 'all' | { categoryId: string; access: boolean; distribute: boolean; distributionLimit: number | null }[];
 
 /** Category rights: Access yes/no and Distribution limit per category (spec 4, 9). */
 export function CategoryRightsEditor({ value, onChange }: { value: Value; onChange: (v: Value) => void }) {
@@ -29,6 +29,7 @@ export function CategoryRightsEditor({ value, onChange }: { value: Value; onChan
               <Table.Tr>
                 <Table.Th>{t.tickets.category}</Table.Th>
                 <Table.Th>{t.ticketSettings.access}</Table.Th>
+                <Table.Th>{t.ticketSettings.distribute}</Table.Th>
                 <Table.Th>{t.ticketSettings.distributionLimit}</Table.Th>
                 <Table.Th />
               </Table.Tr>
@@ -47,11 +48,21 @@ export function CategoryRightsEditor({ value, onChange }: { value: Value; onChan
                     />
                   </Table.Td>
                   <Table.Td>
+                    <Switch
+                      aria-label={`${t.ticketSettings.distribute}: ${title(r.categoryId)}`}
+                      checked={r.distribute}
+                      onChange={(e) =>
+                        onChange(rows.map((x, j) => (j === i ? { ...x, distribute: e.currentTarget.checked } : x)))
+                      }
+                    />
+                  </Table.Td>
+                  <Table.Td>
                     <NumberInput
+                      disabled={!r.distribute}
                       aria-label={`${t.ticketSettings.distributionLimit}: ${title(r.categoryId)}`}
                       w={90}
                       min={1}
-                      placeholder="None"
+                      placeholder={t.ticketSettings.noLimit}
                       value={r.distributionLimit ?? ''}
                       onChange={(v) =>
                         onChange(
@@ -81,7 +92,10 @@ export function CategoryRightsEditor({ value, onChange }: { value: Value; onChan
                 aria-label="Add category"
                 data={unused.map((c) => ({ value: c.id, label: c.title }))}
                 value={null}
-                onChange={(id) => id && onChange([...rows, { categoryId: id, access: true, distributionLimit: null }])}
+                onChange={(id) =>
+                  id &&
+                  onChange([...rows, { categoryId: id, access: true, distribute: false, distributionLimit: null }])
+                }
                 w={240}
               />
             </Group>

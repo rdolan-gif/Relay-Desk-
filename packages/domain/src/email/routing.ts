@@ -152,7 +152,8 @@ export function applyRoutingRules(rules: readonly RoutingRule[], input: RoutingI
     if (a.categoryId !== undefined) actions.categoryId = a.categoryId;
     if (a.userId !== undefined) actions.userId = a.userId;
     if (a.statusIds !== undefined) actions.statusIds = a.statusIds;
-    if (a.state !== undefined) actions.state = a.state;
+    // Rules never close or archive a ticket: only a person does (owner O-15).
+    if (a.state === 'open' || a.state === 'waiting') actions.state = a.state;
     if (a.priority !== undefined) actions.priority = a.priority;
     if (a.customFields) actions.customFields = { ...(actions.customFields ?? {}), ...a.customFields };
   }
@@ -160,8 +161,12 @@ export function applyRoutingRules(rules: readonly RoutingRule[], input: RoutingI
 }
 
 /** Rule regexes are validated on save so a broken one can't be stored. */
-export function validateRule(rule: Pick<RoutingRule, 'title' | 'all' | 'any'>): string[] {
+export function validateRule(
+  rule: Pick<RoutingRule, 'title' | 'all' | 'any'> & { actions?: RoutingActions },
+): string[] {
   const errors: string[] = [];
+  if (rule.actions?.state === 'closed' || rule.actions?.state === 'archived')
+    errors.push('Rules cannot close tickets; an agent closes them.');
   if (!rule.title.trim()) errors.push('Give the rule a title.');
   if (rule.all.length + rule.any.length === 0) errors.push('Add at least one condition.');
   for (const c of [...rule.all, ...rule.any]) {

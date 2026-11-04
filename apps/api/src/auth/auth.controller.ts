@@ -8,7 +8,7 @@ import { effectiveSignature } from '@relay-desk/domain';
 import { ZodPipe } from '../common/zod.pipe';
 import { clientIp, type AppRequest, type AuthContext } from '../common/request-context';
 import { DB, type Db } from '../db/db';
-import { queueLogins, users } from '../db/schema';
+import { users } from '../db/schema';
 import { AuthService } from './auth.service';
 import { Auth, AuthenticatedOnly, Public } from './decorators';
 import { SESSION_COOKIE } from './session.service';
@@ -59,8 +59,6 @@ export class AuthController {
   @HttpCode(204)
   async logout(@Auth() auth: AuthContext, @Req() req: AppRequest, @Res({ passthrough: true }) res: Response) {
     if (auth.sessionId) await this.auth.logout(auth.sessionId, auth.user.id, clientIp(req));
-    // Signing out also stops distribution to this person (spec 9, "Ready for email").
-    await this.db.delete(queueLogins).where(eq(queueLogins.userId, auth.user.id));
     res.clearCookie(SESSION_COOKIE, { path: '/' });
   }
 
