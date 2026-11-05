@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, ilike, isNull, or } from 'drizzle-orm';
 import { fullAccessProfile } from '@relay-desk/domain';
 import { PasswordService } from '../auth/password.service';
 import { SlaService } from '../sla/sla.service';
@@ -322,7 +322,45 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   );
 
   if (opts.demo) await demoData(db, rp, cat, views, opts.password ?? DEFAULT_SEED_PASSWORD, enquiryType);
-  return { categories: cat, views, rightsProfiles: rp, mailboxes: boxes };
+  const linked = await linkPersonViews(db, views);
+  return { categories: cat, views, rightsProfiles: rp, mailboxes: boxes, linkedPersonViews: linked };
+}
+
+/**
+ * The Heather / Thierry / Ryan / Richard views show the tickets assigned to that person
+ * (owner O-24), not the old Gmail-label category of the same name. Each view is linked to the
+ * person's account, found by email (`ryan@…`) or first name; run the setup again after creating
+ * the accounts at go-live. Views whose person has no account yet are left as they are.
+ */
+async function linkPersonViews(db: Db, views: Record<string, string>): Promise<string[]> {
+  const linked: string[] = [];
+  for (const key of LABELS) {
+    const k = key.toLowerCase();
+    const [person] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          isNull(users.deletedAt),
+          eq(users.isActive, true),
+          or(ilike(users.email, `${k}@%`), ilike(users.name, k), ilike(users.name, `${k} %`)),
+        ),
+      )
+      .orderBy(asc(users.createdAt))
+      .limit(1);
+    if (!person) continue;
+    await db
+      .update(ticketViews)
+      .set({
+        conditions: [
+          { field: 'userId', op: 'is', value: person.id },
+          { field: 'state', op: 'is_not', value: 'archived' },
+        ],
+      })
+      .where(eq(ticketViews.id, views[key]!));
+    linked.push(key);
+  }
+  return linked;
 }
 
 /** Demo people and tickets for showing the trial (development only; fictitious customers). */
@@ -541,11 +579,14 @@ if (require.main === module) {
   const db = createDb(pool);
   (demo ? seed(db) : Promise.resolve())
     .then(() => setupSupportTeam(db, { demo }))
-    .then(() =>
+    .then(({ linkedPersonViews }) => {
       console.log(
         `Support team structure ready${demo ? ' (with demo users: richard@, ryan@, thierry@, heather@relaydesk.local)' : ''}.`,
-      ),
-    )
+      );
+      const waiting = ['Heather', 'Thierry', 'Ryan', 'Richard'].filter((k) => !linkedPersonViews.includes(k));
+      if (waiting.length)
+        console.log(`No account yet for: ${waiting.join(', ')}. Create them, then run this again to link their views.`);
+    })
     .catch((err: unknown) => {
       console.error(err);
       process.exitCode = 1;

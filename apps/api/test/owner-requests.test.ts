@@ -48,7 +48,7 @@ describe('owner requests', () => {
     expect((res.body.items as { id: number }[]).map((t) => t.id)).toContain(id);
   });
 
-  it('Ricoman setup: Richard and Ryan are administrators and only they have Unassigned, which leaves out personal inboxes', async () => {
+  it("Ricoman setup: Richard and Ryan are administrators, only they have Unassigned (without personal inboxes), and person views show that person's tickets", async () => {
     const pool = createPool(TEST_DATABASE_URL);
     let setup: Awaited<ReturnType<typeof setupSupportTeam>>;
     try {
@@ -70,12 +70,31 @@ describe('owner requests', () => {
 
     const create = async (title: string, categoryId: string) =>
       (await ryan.post('/api/tickets', { title, categoryId })).body.id as number;
-    const enquiry = await create('Nobody has this enquiry', setup.categories.Enquiries!);
-    const personal = await create('From Ryan’s own inbox', setup.categories["Ryan's Tickets"]!);
+    const enquiry = await create('Nobody has this enquiry', setup!.categories.Enquiries!);
+    const personal = await create('From Ryan’s own inbox', setup!.categories["Ryan's Tickets"]!);
     const listed = (
-      (await ryan.get(`/api/tickets?viewId=${setup.views.Unassigned}&pageSize=200`)).body.items as { id: number }[]
+      (await ryan.get(`/api/tickets?viewId=${setup!.views.Unassigned}&pageSize=200`)).body.items as { id: number }[]
     ).map((t) => t.id);
     expect(listed).toContain(enquiry);
     expect(listed).not.toContain(personal);
+
+    // Person views (O-24): tickets assigned to that person, in any category, and nothing else.
+    expect(setup!.linkedPersonViews.sort()).toEqual(['Heather', 'Richard', 'Ryan', 'Thierry']);
+    const heatherId = (await (await loginAs(ctx.app, 'heather@relaydesk.local')).get('/api/auth/me')).body.user.id;
+    const hers = (
+      await ryan.post('/api/tickets', {
+        title: 'Assigned to Heather',
+        categoryId: setup!.categories.Enquiries!,
+        userId: heatherId,
+      })
+    ).body.id as number;
+    const labelOnly = await create('In the Heather category, owned by nobody', setup!.categories.Heather!);
+    const inView = (await ryan.get(`/api/tickets?viewId=${setup!.views.Heather}&pageSize=200`)).body.items as {
+      id: number;
+      userId: string | null;
+    }[];
+    expect(inView.map((t) => t.id)).toContain(hers);
+    expect(inView.map((t) => t.id)).not.toContain(labelOnly);
+    expect(inView.every((t) => t.userId === heatherId)).toBe(true);
   });
 });

@@ -63,5 +63,7 @@ test('team views appear in the sidebar and filter the list', async ({ page }) =>
     .first()
     .click();
   await expect(page.getByRole('heading', { name: 'My open tickets' })).toBeVisible();
+  // Search within the view: earlier runs leave many open tickets, so it may not be on page 1.
+  await page.getByPlaceholder('Search…').fill('Printer jams');
   await expect(page.getByRole('cell', { name: 'Printer jams on every second page' })).toBeVisible();
 });
