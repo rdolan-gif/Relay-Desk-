@@ -57,8 +57,8 @@ export function conditionToSql(target: FilterTarget, c: FilterCondition): SQL {
     }
   }
 
-  if (c.op === 'empty') return sql`(${scalar} is null or ${scalar} = '')`;
-  if (c.op === 'not_empty') return sql`(${scalar} is not null and ${scalar} <> '')`;
+  if (c.op === 'empty') return sql`(${scalar} is null or ${scalar}::text = '')`;
+  if (c.op === 'not_empty') return sql`(${scalar} is not null and ${scalar}::text <> '')`;
 
   switch (kind) {
     case 'text':

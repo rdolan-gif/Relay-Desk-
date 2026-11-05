@@ -34,4 +34,15 @@ describe('owner requests', () => {
     await admin.patch(`/api/tickets/${id}`, { state: 'closed', statusIds: [ctx.ids.helpdesk.statuses.resolved] });
     expect(await unread()).toBe(false);
   });
+
+  it('a view filtering on an empty person field (Unassigned) lists tickets instead of failing', async () => {
+    const id = (
+      await admin.post('/api/tickets', { title: 'Nobody owns me', categoryId: ctx.ids.helpdesk.categories.support })
+    ).body.id;
+    const views = (await agent.get('/api/tickets/views')).body.teamViews as { id: string; name: string }[];
+    const unassigned = views.find((v) => v.name === 'Unassigned')!;
+    const res = await agent.get(`/api/tickets?viewId=${unassigned.id}`);
+    expect(res.status).toBe(200);
+    expect((res.body.items as { id: number }[]).map((t) => t.id)).toContain(id);
+  });
 });

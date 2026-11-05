@@ -13,7 +13,9 @@ async function login(page: Page, email: string) {
 test('the main menu is Ricoman blue in light mode', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await login(page, 'agent@relaydesk.local');
-  const bg = await page.getByRole('navigation', { name: 'Main' }).evaluate((el) => getComputedStyle(el).backgroundColor);
+  const bg = await page
+    .getByRole('navigation', { name: 'Main' })
+    .evaluate((el) => getComputedStyle(el).backgroundColor);
   expect(bg).toBe('rgb(0, 74, 152)');
 });
 
@@ -58,7 +60,8 @@ test('My views: drag to reorder asks to save; swipe left reveals a bin that asks
     }
   }
   await expect(handles).toHaveCount(2);
-  for (const name of ['My open tickets', 'Unassigned']) // layout has settled
+  for (const name of ['My open tickets', 'Unassigned'])
+    // layout has settled
     await expect(nav.getByRole('button', { name: `Pin to My views: ${name}` })).toHaveCount(0);
   const firstName = (await handles.nth(0).getAttribute('aria-label'))!.replace('Drag to reorder: ', '');
   await handles.nth(1).scrollIntoViewIfNeeded();
@@ -77,13 +80,18 @@ test('My views: drag to reorder asks to save; swipe left reveals a bin that asks
   await expect(handles.nth(1)).toHaveAttribute('aria-label', `Drag to reorder: ${firstName}`);
 
   // Swipe the first view left with the mouse.
-  const label = nav.getByText(firstName === 'My open tickets' ? 'Unassigned' : 'My open tickets', { exact: true }).first();
+  const label = nav
+    .getByText(firstName === 'My open tickets' ? 'Unassigned' : 'My open tickets', { exact: true })
+    .first();
   const box = (await label.boundingBox())!;
   await page.mouse.move(box.x + box.width - 5, box.y + box.height / 2);
   await page.mouse.down();
   await page.mouse.move(box.x - 60, box.y + box.height / 2, { steps: 10 });
   await page.mouse.up();
-  await nav.getByRole('button', { name: /^Delete: / }).first().click();
+  await nav
+    .getByRole('button', { name: /^Delete: / })
+    .first()
+    .click();
   await expect(page.getByRole('dialog', { name: 'Remove from My views?' })).toContainText('Are you sure');
   await page.getByRole('button', { name: 'Remove' }).click();
   await expect(handles).toHaveCount(1);
@@ -95,7 +103,79 @@ test('My views: drag to reorder asks to save; swipe left reveals a bin that asks
   await page.mouse.down();
   await page.mouse.move(last.x - 60, last.y + last.height / 2, { steps: 10 });
   await page.mouse.up();
-  await nav.getByRole('button', { name: /^Delete: / }).first().click();
+  await nav
+    .getByRole('button', { name: /^Delete: / })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Remove' }).click();
   await expect(handles).toHaveCount(0);
+});
+
+test('inside a ticket, Back to tickets returns to the list the agent came from', async ({ page }) => {
+  await login(page, 'agent@relaydesk.local');
+  await page.goto('/tickets');
+  await page.getByRole('navigation', { name: 'Ticket views' }).getByText('Unassigned', { exact: true }).first().click();
+  await expect(page).toHaveURL(/view=/);
+  const listUrl = page.url();
+  await page.getByRole('row').nth(1).click();
+  await page.getByRole('link', { name: 'Back to tickets' }).click();
+  await expect(page).toHaveURL(listUrl);
+});
+
+test('a note can be saved, or saved and the ticket closed, which returns to the list', async ({ page }) => {
+  await login(page, 'agent@relaydesk.local');
+  const title = `E2E close note ${Date.now()}`;
+  await page.goto('/tickets/new');
+  await page.getByLabel('Title').fill(title);
+  await page.getByRole('textbox', { name: 'Category' }).click();
+  await page.getByRole('option', { name: 'Support' }).click();
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByRole('heading', { name: title })).toBeVisible();
+  const ticketUrl = page.url();
+
+  await page.getByRole('textbox', { name: 'Comment' }).click();
+  await page.keyboard.type('First note, ticket stays open.');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('First note, ticket stays open.')).toBeVisible();
+  await expect(page.getByText('Open', { exact: true }).first()).toBeVisible();
+
+  // This category needs a status to close: the note is kept and the person is told why.
+  await page.getByRole('textbox', { name: 'Comment' }).click();
+  await page.keyboard.type('All sorted, closing.');
+  await page.getByRole('button', { name: 'Save and close ticket' }).click();
+  await expect(page.getByText(/Saved, but the ticket was not closed: Choose a status/)).toBeVisible();
+  await expect(page.getByText('All sorted, closing.')).toBeVisible();
+  await expect(page).toHaveURL(ticketUrl);
+
+  await page.getByRole('textbox', { name: 'Status' }).click();
+  await page.getByRole('option', { name: 'Resolved' }).click();
+  await page.getByRole('button', { name: 'Save and close ticket' }).click();
+  await expect(page).toHaveURL(/\/tickets(\?|$)/);
+  await page.goto(ticketUrl);
+  await expect(page.getByText('All sorted, closing.')).toBeVisible();
+  await expect(page.getByText('Closed', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save and close ticket' })).toHaveCount(0);
+});
+
+test('a reply can be sent and the ticket closed in one click', async ({ page }) => {
+  await login(page, 'agent@relaydesk.local');
+  const subject = `E2E send close ${Date.now()}`;
+  await page.goto('/tickets');
+  await page.getByRole('button', { name: 'New email' }).click();
+  await page.getByRole('textbox', { name: 'To' }).fill('buyer@example.com');
+  await page.keyboard.press('Enter');
+  await page.getByLabel('Subject').fill(subject);
+  await page.locator('.ProseMirror p').first().click();
+  await page.keyboard.type('Here is your quote.');
+  await page.getByRole('button', { name: /send email/i }).click();
+  await expect(page.getByRole('heading', { name: subject })).toBeVisible();
+  const ticketUrl = page.url();
+
+  await page.getByRole('textbox', { name: 'Status' }).click();
+  await page.getByRole('option', { name: 'Resolved' }).click();
+  await page.getByRole('button', { name: 'Reply', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Send and close ticket' }).click();
+  await expect(page).toHaveURL(/\/tickets(\?|$)/);
+  await page.goto(ticketUrl);
+  await expect(page.getByText('Closed', { exact: true }).first()).toBeVisible();
 });

@@ -55,6 +55,7 @@ import { t } from '../../i18n/en-GB';
 import { notifyError, notifyOk } from '../../notify';
 import { PRIORITY_COLOURS, STATE_COLOURS, useTicketMeta } from '../../tickets/hooks';
 import type { Activity, TicketDetail } from '../../tickets/types';
+import { lastTicketList } from '../../tickets/lastList';
 
 interface Draft {
   title: string;
@@ -185,8 +186,24 @@ export function TicketPage() {
   const dirty = !!draft && !!ticket.data && JSON.stringify(draft) !== JSON.stringify(draftOf(ticket.data));
   const hasComment = comment.bodyHtml.trim().length > 0;
 
+  /** Closes the ticket after the comment or email is in, so that activity can't reopen it. */
+  const closeTicket = async () => {
+    const fresh = await api<TicketDetail>('GET', `/tickets/${id}`);
+    if (fresh.state !== 'closed') await api('PATCH', `/tickets/${id}`, { state: 'closed', version: fresh.version });
+  };
+  /** Closing was refused (e.g. the category needs a status): say so, the rest is saved. */
+  const closeRefused = (err: unknown) => {
+    fieldErrors.handle(err);
+    notifyError(new Error(t.tickets.savedNotClosed(err instanceof Error ? err.message : String(err))));
+  };
+  const leaveClosed = async () => {
+    notifyOk(t.tickets.closedAndBack);
+    await qc.invalidateQueries({ queryKey: ['/tickets'] });
+    nav(lastTicketList());
+  };
+
   const save = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts?: { close?: boolean }) => {
       if (isNew)
         return api<TicketDetail>('POST', '/tickets', {
           ...draft,
@@ -204,21 +221,42 @@ export function TicketPage() {
           version: ticket.data!.version,
         });
       if (hasComment) await api('POST', `/tickets/${id}/comments`, comment);
+      if (opts?.close) {
+        try {
+          await closeTicket();
+        } catch (err) {
+          // The form and comment are saved; only closing failed (e.g. a status is required).
+          return { saved, closeError: err };
+        }
+        return { saved, closed: true };
+      }
       return saved;
     },
-    onSuccess: async (saved) => {
+    onSuccess: async (result) => {
+      if (result && 'closed' in result) {
+        setComment({ bodyHtml: '', mentionUserIds: [], isExternal: false });
+        await leaveClosed();
+        return;
+      }
+      if (result && 'closeError' in result) {
+        setComment({ bodyHtml: '', mentionUserIds: [], isExternal: false });
+        await refresh();
+        closeRefused(result.closeError);
+        return;
+      }
+      const saved = result as TicketDetail | undefined;
       fieldErrors.clear();
       setConflict(false);
       if (isNew) {
         if (saved && saved.visible === false) {
           notifyOk(t.tickets.noVisible);
-          nav('/tickets');
+          nav(lastTicketList());
         } else if (saved) nav(`/tickets/${saved.id}`, { replace: true });
         return;
       }
       if (saved && saved.visible === false) {
         notifyOk(t.tickets.noVisible);
-        nav('/tickets');
+        nav(lastTicketList());
         return;
       }
       setComment({ bodyHtml: '', mentionUserIds: [], isExternal: false });
@@ -267,12 +305,12 @@ export function TicketPage() {
         else if (a.type === 'back') {
           await persist();
           notifyOk(t.macros.ran(m.title));
-          nav('/tickets');
+          nav(lastTicketList());
           return 'left';
         } else if (a.type === 'delete') {
           if (!window.confirm(t.crm.confirmDelete)) return 'stopped';
           await api('DELETE', `/tickets/${id}`);
-          nav('/tickets');
+          nav(lastTicketList());
           return 'left';
         } else if (a.type === 'insert_template') {
           const lastIn = [...(activities.data ?? [])].reverse().find((x) => x.type === 'email' && x.direction === 'in');
@@ -495,6 +533,16 @@ export function TicketPage() {
           })
         }
       />
+      <Button
+        component={RouterLink}
+        to={lastTicketList()}
+        variant="subtle"
+        size="compact-sm"
+        leftSection={<span aria-hidden>←</span>}
+        style={{ alignSelf: 'flex-start' }}
+      >
+        {t.tickets.backToTickets}
+      </Button>
       <Group justify="space-between" align="flex-start">
         <Stack gap={2}>
           <Group gap="xs">
@@ -656,7 +704,7 @@ export function TicketPage() {
                         window.confirm(t.crm.confirmDelete) &&
                         action.mutate(async () => {
                           await api('DELETE', `/tickets/${id}`);
-                          nav('/tickets');
+                          nav(lastTicketList());
                         })
                       }
                     >
@@ -825,8 +873,18 @@ export function TicketPage() {
                       ticket={{ id: tk.id, title: tk.title, categoryId: tk.categoryId }}
                       formDirty={dirty}
                       saveForm={() => api('PATCH', `/tickets/${id}`, { ...draft, version: tk.version })}
-                      onSent={async () => {
+                      canClose={tk.state !== 'closed'}
+                      onSent={async (r, close) => {
                         setCompose(null);
+                        if (close && r.status !== 'failed') {
+                          try {
+                            await closeTicket();
+                            await leaveClosed();
+                            return;
+                          } catch (err) {
+                            closeRefused(err);
+                          }
+                        }
                         await refresh();
                       }}
                       onCancel={() => setCompose(null)}
@@ -877,9 +935,22 @@ export function TicketPage() {
                               onChange={(e) => setComment({ ...comment, isExternal: e.currentTarget.checked })}
                             />
                           )}
-                          <Button disabled={!hasComment} loading={save.isPending} onClick={() => save.mutate()}>
-                            {dirty ? t.tickets.saveAndComment : t.tickets.addComment}
+                          <Button
+                            variant="default"
+                            disabled={!hasComment && !dirty}
+                            loading={save.isPending && !save.variables?.close}
+                            onClick={() => save.mutate({})}
+                          >
+                            {t.tickets.save}
                           </Button>
+                          {tk?.state !== 'closed' && (
+                            <Button
+                              loading={save.isPending && !!save.variables?.close}
+                              onClick={() => save.mutate({ close: true })}
+                            >
+                              {t.tickets.saveAndClose}
+                            </Button>
+                          )}
                         </Group>
                       </Stack>
                     </Paper>

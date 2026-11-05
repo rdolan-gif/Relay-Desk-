@@ -16,8 +16,8 @@ import {
 } from '@mantine/core';
 import { MyViewsList } from '../../components/MyViewsList';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import type { FilterCondition } from '@relay-desk/domain';
 import { api } from '../../api';
 import { useAuth } from '../../auth';
@@ -31,6 +31,7 @@ import { t } from '../../i18n/en-GB';
 import { notifyError, notifyOk } from '../../notify';
 import { PRIORITY_COLOURS, STATE_COLOURS, useTicketMeta } from '../../tickets/hooks';
 import type { Sidebar, Ticket } from '../../tickets/types';
+import { rememberTicketList } from '../../tickets/lastList';
 
 /** Tickets module (spec 6.1): view sidebar, filterable list, bulk actions. */
 export function TicketsPage() {
@@ -38,6 +39,8 @@ export function TicketsPage() {
   const qc = useQueryClient();
   const { me, can } = useAuth();
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  useEffect(() => rememberTicketList(location.search), [location.search]);
   const viewId = params.get('view') ?? undefined;
   const meta = useTicketMeta();
   const crm = useCrmMeta();

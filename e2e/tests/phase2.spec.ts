@@ -49,7 +49,7 @@ test("a comment by someone other than the ticket's User reopens a closed ticket"
   await adminPage.goto(`/tickets/${id}`);
   await adminPage.getByRole('textbox', { name: 'Comment' }).click();
   await adminPage.keyboard.type('Customer called back with more details.');
-  await adminPage.getByRole('button', { name: 'Add comment' }).last().click();
+  await adminPage.getByRole('button', { name: 'Save', exact: true }).last().click();
   await expect(adminPage.getByText('Customer called back with more details.')).toBeVisible();
   await expect(stateBadge(adminPage, 'Open')).toBeVisible();
 });
@@ -57,7 +57,11 @@ test("a comment by someone other than the ticket's User reopens a closed ticket"
 test('team views appear in the sidebar and filter the list', async ({ page }) => {
   await login(page, 'agent@relaydesk.local');
   await page.goto('/tickets');
-  await page.getByRole('navigation', { name: 'Ticket views' }).getByText('My open tickets', { exact: true }).first().click();
+  await page
+    .getByRole('navigation', { name: 'Ticket views' })
+    .getByText('My open tickets', { exact: true })
+    .first()
+    .click();
   await expect(page.getByRole('heading', { name: 'My open tickets' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Printer jams on every second page' })).toBeVisible();
 });

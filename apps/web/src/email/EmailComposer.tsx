@@ -33,7 +33,10 @@ interface Props {
   /** When the ticket form has unsaved changes, sending saves it first (spec 6.2). */
   formDirty?: boolean;
   saveForm?: () => Promise<unknown>;
-  onSent: (r: { ticketId: number; status: string }) => void;
+  /** `close`: the person chose "Send and close ticket". */
+  onSent: (r: { ticketId: number; status: string }, close: boolean) => void;
+  /** Offer "Send and close ticket" (a ticket that isn't closed yet). */
+  canClose?: boolean;
   onCancel: () => void;
   /** Pre-fill with this template (a macro's "Insert template", spec 10). */
   initialTemplateId?: string | null;
@@ -49,6 +52,7 @@ export function EmailComposer({
   formDirty,
   saveForm,
   onSent,
+  canClose,
   onCancel,
   initialTemplateId,
 }: Props) {
@@ -131,7 +135,7 @@ export function EmailComposer({
   }, [initialTemplateId]);
 
   const send = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (_close: boolean) => {
       if (formDirty && saveForm) await saveForm();
       return api<{ ticketId: number; status: string; error: string | null }>('POST', '/emails', {
         queueId,
@@ -146,10 +150,10 @@ export function EmailComposer({
         attachmentIds: files.map((f) => f.id),
       });
     },
-    onSuccess: (r) => {
+    onSuccess: (r, close) => {
       if (r.status === 'failed') notifyError(new Error(t.email.failedBecause(r.error ?? '')));
-      else notifyOk(t.email.sent);
-      onSent(r);
+      else if (!close) notifyOk(t.email.sent);
+      onSent(r, close);
     },
     onError: notifyError,
   });
@@ -256,12 +260,22 @@ export function EmailComposer({
               {t.email.discard}
             </Button>
             <Button
-              loading={send.isPending}
+              variant={canClose ? 'default' : 'filled'}
+              loading={send.isPending && !send.variables}
               disabled={!queueId || !to.length || !subject.trim()}
-              onClick={() => send.mutate()}
+              onClick={() => send.mutate(false)}
             >
               {formDirty ? t.email.saveAndSend : t.email.send}
             </Button>
+            {canClose && (
+              <Button
+                loading={send.isPending && !!send.variables}
+                disabled={!queueId || !to.length || !subject.trim()}
+                onClick={() => send.mutate(true)}
+              >
+                {t.email.sendAndClose}
+              </Button>
+            )}
           </Group>
         </Group>
       </Stack>

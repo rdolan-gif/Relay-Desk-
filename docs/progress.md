@@ -12,6 +12,9 @@
 | Main menu Ricoman blue in light mode (O-17)                                                                                 | `e2e/tests/owner-requests.spec.ts`                                                     |
 | Open, unread tickets bold until opened; bold again after new activity (O-18)                                                | `apps/api/test/owner-requests.test.ts`, `e2e/tests/owner-requests.spec.ts`             |
 | My views: drag to reorder asks to save; swipe left reveals a bin that asks before deleting (O-19)                           | `e2e/tests/owner-requests.spec.ts`                                                     |
+| Back to tickets returns to the list the agent came from (O-20)                                                              | `e2e/tests/owner-requests.spec.ts`                                                     |
+| Save / Save and close ticket on notes; Send and close ticket on emails; a refused close keeps the note and says why (O-21)  | `e2e/tests/owner-requests.spec.ts`                                                     |
+| Fix: views filtering on an empty person field (e.g. Unassigned) failed with a database error                                | `apps/api/test/owner-requests.test.ts`                                                 |
 
 ## Phase 7 — Reporting and knowledge base ✅ (portal deferred, owner S-8)
 
