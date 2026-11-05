@@ -216,12 +216,44 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
         .onConflictDoNothing();
     return rp!.id;
   };
+  // Richard and Ryan are the administrators (owner O-23).
   const rp = {
     Richard: await rights('Support – Richard (line manager)', null, true),
-    Ryan: await rights('Support – Ryan', PERSONAL.Ryan!, false),
+    Ryan: await rights('Support – Ryan', PERSONAL.Ryan!, true),
     Thierry: await rights('Support – Thierry', PERSONAL.Thierry!, false),
     Heather: await rights('Support – Heather', PERSONAL.Heather!, false),
   };
+
+  // "Unassigned" (owner O-22): open or waiting tickets nobody owns, in the shared and label
+  // categories, so nothing is missed. Personal-inbox tickets are left out (they arrive without
+  // an owner but belong to that person). Only the administrators have it.
+  const unassignedConditions = [
+    { field: 'userId', op: 'empty' as const },
+    { field: 'state', op: 'is_not' as const, value: 'closed' },
+    { field: 'state', op: 'is_not' as const, value: 'archived' },
+    ...Object.values(PERSONAL).map((t) => ({ field: 'categoryId', op: 'is_not' as const, value: cat[t]! })),
+  ];
+  const [unassignedRow] = await db
+    .select()
+    .from(ticketViews)
+    .where(and(eq(ticketViews.name, 'Unassigned'), isNull(ticketViews.ownerUserId), isNull(ticketViews.deletedAt)));
+  // An existing "Unassigned" (e.g. from the demo seed) takes these conditions.
+  const unassigned = unassignedRow
+    ? (
+        await db
+          .update(ticketViews)
+          .set({ conditions: unassignedConditions })
+          .where(eq(ticketViews.id, unassignedRow.id))
+          .returning()
+      )[0]!.id
+    : (await db.insert(ticketViews).values({ name: 'Unassigned', conditions: unassignedConditions }).returning())[0]!
+        .id;
+  views.Unassigned = unassigned;
+  for (const profileId of [rp.Richard, rp.Ryan])
+    await db
+      .insert(rightsProfileTicketViews)
+      .values({ rightsProfileId: profileId, viewId: unassigned })
+      .onConflictDoNothing();
 
   // The four Gmail inboxes (owner O-1, O-10). Addresses can be corrected in Settings > Mailboxes;
   // each is connected with "Connect Gmail" once Google sign-in is set up.
@@ -332,7 +364,7 @@ async function demoData(
   };
   const u = {
     Richard: await person('Richard', 'Richard (Line Manager)', true),
-    Ryan: await person('Ryan', 'Ryan', false),
+    Ryan: await person('Ryan', 'Ryan', true),
     Thierry: await person('Thierry', 'Thierry', false),
     Heather: await person('Heather', 'Heather', false),
   };
