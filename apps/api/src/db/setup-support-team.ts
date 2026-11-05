@@ -322,7 +322,7 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   );
 
   if (opts.demo) await demoData(db, rp, cat, views, opts.password ?? DEFAULT_SEED_PASSWORD, enquiryType);
-  const linked = await linkPersonViews(db, views);
+  const linked = await linkPersonViews(db, views, cat, boxes);
   return { categories: cat, views, rightsProfiles: rp, mailboxes: boxes, linkedPersonViews: linked };
 }
 
@@ -330,9 +330,15 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
  * The Heather / Thierry / Ryan / Richard views show the tickets assigned to that person
  * (owner O-24), not the old Gmail-label category of the same name. Each view is linked to the
  * person's account, found by email (`ryan@…`) or first name; run the setup again after creating
- * the accounts at go-live. Views whose person has no account yet are left as they are.
+ * the accounts at go-live. Views whose person has no account yet are left as they are. The same
+ * link makes each personal inbox assign its new tickets to its owner (O-25).
  */
-async function linkPersonViews(db: Db, views: Record<string, string>): Promise<string[]> {
+async function linkPersonViews(
+  db: Db,
+  views: Record<string, string>,
+  cat: Record<string, string>,
+  boxes: Record<string, string>,
+): Promise<string[]> {
   const linked: string[] = [];
   for (const key of LABELS) {
     const k = key.toLowerCase();
@@ -355,9 +361,14 @@ async function linkPersonViews(db: Db, views: Record<string, string>): Promise<s
         conditions: [
           { field: 'userId', op: 'is', value: person.id },
           { field: 'state', op: 'is_not', value: 'archived' },
+          // Personal-inbox tickets show only in that person's "… Tickets" view (O-25).
+          ...Object.values(PERSONAL).map((t) => ({ field: 'categoryId', op: 'is_not' as const, value: cat[t]! })),
         ],
       })
       .where(eq(ticketViews.id, views[key]!));
+    // Mail to a personal inbox is assigned to its owner as it arrives (O-25).
+    if (key in PERSONAL && boxes[key])
+      await db.update(mailboxQueues).set({ defaultUserId: person.id }).where(eq(mailboxQueues.id, boxes[key]!));
     linked.push(key);
   }
   return linked;

@@ -6,7 +6,7 @@ import { SECRET_BOX, SecretBox } from '../common/crypto';
 import { isUniqueViolation } from '../common/db-errors';
 import type { AuthContext } from '../common/request-context';
 import { DB, type Db } from '../db/db';
-import { categories, crmDatabases, mailboxQueueCrmDatabases, mailboxQueues } from '../db/schema';
+import { categories, crmDatabases, mailboxQueueCrmDatabases, mailboxQueues, users } from '../db/schema';
 import type { MailboxRef } from './providers';
 
 export interface MailboxInput {
@@ -15,6 +15,7 @@ export interface MailboxInput {
   senderName: string;
   provider: 'gmail' | 'fake';
   defaultCategoryId: string;
+  defaultUserId?: string | null;
   headerThreading: boolean;
   active: boolean;
   autoResponseEnabled: boolean;
@@ -263,6 +264,13 @@ export class MailboxesService {
       .from(categories)
       .where(and(eq(categories.id, input.defaultCategoryId), isNull(categories.deletedAt)));
     if (!cat) throw new BadRequestException({ message: 'Unknown category.', reason: 'unknown_category' });
+    if (input.defaultUserId) {
+      const [u] = await this.db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.id, input.defaultUserId), eq(users.isActive, true), isNull(users.deletedAt)));
+      if (!u) throw new BadRequestException({ message: 'Unknown or inactive user.', reason: 'unknown_user' });
+    }
     if (input.crmDatabaseIds.length) {
       const found = await this.db
         .select({ id: crmDatabases.id })
@@ -289,6 +297,7 @@ export function publicMailbox(r: MailboxRow, crmDatabaseIds: string[]) {
     senderName: r.senderName,
     provider: r.provider,
     defaultCategoryId: r.defaultCategoryId,
+    defaultUserId: r.defaultUserId,
     headerThreading: r.headerThreading,
     active: r.active,
     autoResponseEnabled: r.autoResponseEnabled,

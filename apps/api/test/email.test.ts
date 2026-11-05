@@ -40,6 +40,36 @@ describe('email channel (spec 11)', () => {
       expect((await admin.get('/api/tickets?q=Hello')).body.total).toBe(1);
     });
 
+    it('a personal inbox assigns its new tickets to its owner; a shared inbox leaves them unassigned', async () => {
+      const me = (await agent.get('/api/auth/me')).body.user.id as string;
+      const box = await admin.post('/api/settings/mailboxes', {
+        title: "Alex's inbox",
+        address: 'alex@relaydesk.local',
+        provider: 'fake',
+        defaultCategoryId: ctx.ids.helpdesk.categories.support,
+        defaultUserId: me,
+      });
+      expect(box.status).toBe(201);
+      expect(box.body.defaultUserId).toBe(me);
+      const personal = await receive(ctx.app, box.body.id, {
+        from: 'buyer@example.com',
+        to: 'alex@relaydesk.local',
+        subject: 'For Alex',
+      });
+      expect((await admin.get(`/api/tickets/${tid(personal)}`)).body.userId).toBe(me);
+      const shared = await receive(ctx.app, mailbox, { from: 'buyer@example.com', subject: 'For anyone' });
+      expect((await admin.get(`/api/tickets/${tid(shared)}`)).body.userId).toBeNull();
+      // Only an active person can own a mailbox.
+      const bad = await admin.put(`/api/settings/mailboxes/${box.body.id}`, {
+        title: "Alex's inbox",
+        address: 'alex@relaydesk.local',
+        provider: 'fake',
+        defaultCategoryId: ctx.ids.helpdesk.categories.support,
+        defaultUserId: '00000000-0000-4000-8000-000000000000',
+      });
+      expect(bad.body.reason).toBe('unknown_user');
+    });
+
     it('mail from our own mailbox address is dropped as a loop', async () => {
       const r = await receive(ctx.app, mailbox, { from: SUPPORT, subject: 'Loop' });
       expect(r.outcome).toBe('dropped_loop');

@@ -19,7 +19,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth';
-import { useCrmMeta } from '../../crm/hooks';
+import { useCrmMeta, useUserDirectory } from '../../crm/hooks';
 import type { EmailTemplate } from '../../email/types';
 import { formatDateTime } from '../../format';
 import { t } from '../../i18n/en-GB';
@@ -33,6 +33,7 @@ interface Mailbox {
   senderName: string;
   provider: 'gmail' | 'fake';
   defaultCategoryId: string;
+  defaultUserId: string | null;
   headerThreading: boolean;
   active: boolean;
   autoResponseEnabled: boolean;
@@ -53,6 +54,7 @@ const EMPTY = (categoryId: string): Draft => ({
   senderName: '',
   provider: 'gmail',
   defaultCategoryId: categoryId,
+  defaultUserId: null,
   headerThreading: true,
   active: true,
   autoResponseEnabled: false,
@@ -70,6 +72,7 @@ export function MailboxesPage() {
   const [params, setParams] = useSearchParams();
   const meta = useTicketMeta();
   const crm = useCrmMeta();
+  const users = useUserDirectory();
   const list = useQuery({
     queryKey: ['mailbox-settings'],
     queryFn: () =>
@@ -251,6 +254,16 @@ export function MailboxesPage() {
               allowDeselect={false}
               searchable
               onChange={(v) => v && setDraft({ ...draft, defaultCategoryId: v })}
+            />
+            <Select
+              label={t.mailboxes.defaultUser}
+              description={t.mailboxes.defaultUserHelp}
+              placeholder={t.mailboxes.noDefaultUser}
+              data={(users.data ?? []).map((u) => ({ value: u.id, label: u.name }))}
+              value={draft.defaultUserId ?? null}
+              clearable
+              searchable
+              onChange={(v) => setDraft({ ...draft, defaultUserId: v })}
             />
             <MultiSelect
               label={t.mailboxes.crmDatabases}

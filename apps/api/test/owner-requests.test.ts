@@ -96,5 +96,27 @@ describe('owner requests', () => {
     expect(inView.map((t) => t.id)).toContain(hers);
     expect(inView.map((t) => t.id)).not.toContain(labelOnly);
     expect(inView.every((t) => t.userId === heatherId)).toBe(true);
+
+    // Personal inboxes (O-25): new mail is assigned to the owner, and shows only in their
+    // "… Tickets" view, not in their person view.
+    const ryanId = (await ryan.get('/api/auth/me')).body.user.id as string;
+    const boxesRes = await ryan.get('/api/settings/mailboxes');
+    const boxes = boxesRes.body.mailboxes as {
+      address: string;
+      defaultUserId: string | null;
+    }[];
+    expect(boxes.find((b) => b.address === 'ryan@ricoman.com')!.defaultUserId).toBe(ryanId);
+    expect(boxes.find((b) => b.address === 'support@ricoman.com')!.defaultUserId).toBeNull();
+    const own = (
+      await ryan.post('/api/tickets', {
+        title: 'From Ryan’s inbox, assigned to Ryan',
+        categoryId: setup!.categories["Ryan's Tickets"]!,
+        userId: ryanId,
+      })
+    ).body.id as number;
+    const ids = async (viewId: string) =>
+      ((await ryan.get(`/api/tickets?viewId=${viewId}&pageSize=200`)).body.items as { id: number }[]).map((t) => t.id);
+    expect(await ids(setup!.views.Ryan!)).not.toContain(own);
+    expect(await ids(setup!.views["Ryan's Tickets"]!)).toContain(own);
   });
 });
