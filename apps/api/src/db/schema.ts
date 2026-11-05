@@ -716,6 +716,8 @@ export const mailboxQueues = pgTable(
     defaultCategoryId: uuid('default_category_id')
       .notNull()
       .references(() => categories.id),
+    /** New tickets from this mailbox are assigned to this person (e.g. a personal inbox). */
+    defaultUserId: uuid('default_user_id').references(() => users.id, { onDelete: 'set null' }),
     headerThreading: boolean('header_threading').notNull().default(true),
     active: boolean('active').notNull().default(true),
     /** Staff notification emails are sent from this mailbox (spec 13). */

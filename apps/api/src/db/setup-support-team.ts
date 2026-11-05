@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, ilike, isNull, or } from 'drizzle-orm';
 import { fullAccessProfile } from '@relay-desk/domain';
 import { PasswordService } from '../auth/password.service';
 import { SlaService } from '../sla/sla.service';
@@ -216,12 +216,44 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
         .onConflictDoNothing();
     return rp!.id;
   };
+  // Richard and Ryan are the administrators (owner O-23).
   const rp = {
     Richard: await rights('Support – Richard (line manager)', null, true),
-    Ryan: await rights('Support – Ryan', PERSONAL.Ryan!, false),
+    Ryan: await rights('Support – Ryan', PERSONAL.Ryan!, true),
     Thierry: await rights('Support – Thierry', PERSONAL.Thierry!, false),
     Heather: await rights('Support – Heather', PERSONAL.Heather!, false),
   };
+
+  // "Unassigned" (owner O-22): open or waiting tickets nobody owns, in the shared and label
+  // categories, so nothing is missed. Personal-inbox tickets are left out (they arrive without
+  // an owner but belong to that person). Only the administrators have it.
+  const unassignedConditions = [
+    { field: 'userId', op: 'empty' as const },
+    { field: 'state', op: 'is_not' as const, value: 'closed' },
+    { field: 'state', op: 'is_not' as const, value: 'archived' },
+    ...Object.values(PERSONAL).map((t) => ({ field: 'categoryId', op: 'is_not' as const, value: cat[t]! })),
+  ];
+  const [unassignedRow] = await db
+    .select()
+    .from(ticketViews)
+    .where(and(eq(ticketViews.name, 'Unassigned'), isNull(ticketViews.ownerUserId), isNull(ticketViews.deletedAt)));
+  // An existing "Unassigned" (e.g. from the demo seed) takes these conditions.
+  const unassigned = unassignedRow
+    ? (
+        await db
+          .update(ticketViews)
+          .set({ conditions: unassignedConditions })
+          .where(eq(ticketViews.id, unassignedRow.id))
+          .returning()
+      )[0]!.id
+    : (await db.insert(ticketViews).values({ name: 'Unassigned', conditions: unassignedConditions }).returning())[0]!
+        .id;
+  views.Unassigned = unassigned;
+  for (const profileId of [rp.Richard, rp.Ryan])
+    await db
+      .insert(rightsProfileTicketViews)
+      .values({ rightsProfileId: profileId, viewId: unassigned })
+      .onConflictDoNothing();
 
   // The four Gmail inboxes (owner O-1, O-10). Addresses can be corrected in Settings > Mailboxes;
   // each is connected with "Connect Gmail" once Google sign-in is set up.
@@ -290,7 +322,56 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   );
 
   if (opts.demo) await demoData(db, rp, cat, views, opts.password ?? DEFAULT_SEED_PASSWORD, enquiryType);
-  return { categories: cat, views, rightsProfiles: rp, mailboxes: boxes };
+  const linked = await linkPersonViews(db, views, cat, boxes);
+  return { categories: cat, views, rightsProfiles: rp, mailboxes: boxes, linkedPersonViews: linked };
+}
+
+/**
+ * The Heather / Thierry / Ryan / Richard views show the tickets assigned to that person
+ * (owner O-24), not the old Gmail-label category of the same name. Each view is linked to the
+ * person's account, found by email (`ryan@…`) or first name; run the setup again after creating
+ * the accounts at go-live. Views whose person has no account yet are left as they are. The same
+ * link makes each personal inbox assign its new tickets to its owner (O-25).
+ */
+async function linkPersonViews(
+  db: Db,
+  views: Record<string, string>,
+  cat: Record<string, string>,
+  boxes: Record<string, string>,
+): Promise<string[]> {
+  const linked: string[] = [];
+  for (const key of LABELS) {
+    const k = key.toLowerCase();
+    const [person] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          isNull(users.deletedAt),
+          eq(users.isActive, true),
+          or(ilike(users.email, `${k}@%`), ilike(users.name, k), ilike(users.name, `${k} %`)),
+        ),
+      )
+      .orderBy(asc(users.createdAt))
+      .limit(1);
+    if (!person) continue;
+    await db
+      .update(ticketViews)
+      .set({
+        conditions: [
+          { field: 'userId', op: 'is', value: person.id },
+          { field: 'state', op: 'is_not', value: 'archived' },
+          // Personal-inbox tickets show only in that person's "… Tickets" view (O-25).
+          ...Object.values(PERSONAL).map((t) => ({ field: 'categoryId', op: 'is_not' as const, value: cat[t]! })),
+        ],
+      })
+      .where(eq(ticketViews.id, views[key]!));
+    // Mail to a personal inbox is assigned to its owner as it arrives (O-25).
+    if (key in PERSONAL && boxes[key])
+      await db.update(mailboxQueues).set({ defaultUserId: person.id }).where(eq(mailboxQueues.id, boxes[key]!));
+    linked.push(key);
+  }
+  return linked;
 }
 
 /** Demo people and tickets for showing the trial (development only; fictitious customers). */
@@ -332,7 +413,7 @@ async function demoData(
   };
   const u = {
     Richard: await person('Richard', 'Richard (Line Manager)', true),
-    Ryan: await person('Ryan', 'Ryan', false),
+    Ryan: await person('Ryan', 'Ryan', true),
     Thierry: await person('Thierry', 'Thierry', false),
     Heather: await person('Heather', 'Heather', false),
   };
@@ -509,11 +590,14 @@ if (require.main === module) {
   const db = createDb(pool);
   (demo ? seed(db) : Promise.resolve())
     .then(() => setupSupportTeam(db, { demo }))
-    .then(() =>
+    .then(({ linkedPersonViews }) => {
       console.log(
         `Support team structure ready${demo ? ' (with demo users: richard@, ryan@, thierry@, heather@relaydesk.local)' : ''}.`,
-      ),
-    )
+      );
+      const waiting = ['Heather', 'Thierry', 'Ryan', 'Richard'].filter((k) => !linkedPersonViews.includes(k));
+      if (waiting.length)
+        console.log(`No account yet for: ${waiting.join(', ')}. Create them, then run this again to link their views.`);
+    })
     .catch((err: unknown) => {
       console.error(err);
       process.exitCode = 1;

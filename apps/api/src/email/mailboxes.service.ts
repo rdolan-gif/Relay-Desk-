@@ -6,7 +6,7 @@ import { SECRET_BOX, SecretBox } from '../common/crypto';
 import { isUniqueViolation } from '../common/db-errors';
 import type { AuthContext } from '../common/request-context';
 import { DB, type Db } from '../db/db';
-import { categories, crmDatabases, mailboxQueueCrmDatabases, mailboxQueues } from '../db/schema';
+import { categories, crmDatabases, mailboxQueueCrmDatabases, mailboxQueues, users } from '../db/schema';
 import type { MailboxRef } from './providers';
 
 export interface MailboxInput {
@@ -15,6 +15,7 @@ export interface MailboxInput {
   senderName: string;
   provider: 'gmail' | 'fake';
   defaultCategoryId: string;
+  defaultUserId?: string | null;
   headerThreading: boolean;
   active: boolean;
   autoResponseEnabled: boolean;
@@ -43,10 +44,12 @@ export class MailboxesService {
       .where(isNull(mailboxQueues.deletedAt))
       .orderBy(asc(mailboxQueues.title));
     const links = await this.db.select().from(mailboxQueueCrmDatabases);
+    const titles = await this.categoryTitles();
     return rows.map((r) =>
       publicMailbox(
         r,
         links.filter((l) => l.queueId === r.id).map((l) => l.crmDatabaseId),
+        titles.get(r.defaultCategoryId),
       ),
     );
   }
@@ -70,6 +73,7 @@ export class MailboxesService {
     return publicMailbox(
       r,
       links.map((l) => l.crmDatabaseId),
+      (await this.categoryTitles()).get(r.defaultCategoryId),
     );
   }
 
@@ -107,7 +111,7 @@ export class MailboxesService {
           },
           tx,
         );
-        return publicMailbox(row!, dbIds);
+        return publicMailbox(row!, dbIds, (await this.categoryTitles()).get(row!.defaultCategoryId));
       });
     } catch (err) {
       if (isUniqueViolation(err))
@@ -142,7 +146,7 @@ export class MailboxesService {
         await tx
           .insert(mailboxQueueCrmDatabases)
           .values(crmDatabaseIds.map((crmDatabaseId) => ({ queueId: id, crmDatabaseId })));
-      const after = publicMailbox(row!, crmDatabaseIds);
+      const after = publicMailbox(row!, crmDatabaseIds, (await this.categoryTitles()).get(row!.defaultCategoryId));
       await this.audit.record(
         {
           eventType: 'settings.updated',
@@ -247,6 +251,12 @@ export class MailboxesService {
     return row;
   }
 
+  /** Category names, so a mailbox shows where it files mail even when the admin can't see that category. */
+  private async categoryTitles(): Promise<Map<string, string>> {
+    const rows = await this.db.select({ id: categories.id, title: categories.title }).from(categories);
+    return new Map(rows.map((c) => [c.id, c.title]));
+  }
+
   async allAddresses(): Promise<string[]> {
     return (await this.db.select({ a: mailboxQueues.address }).from(mailboxQueues)).map((r) => r.a);
   }
@@ -263,6 +273,13 @@ export class MailboxesService {
       .from(categories)
       .where(and(eq(categories.id, input.defaultCategoryId), isNull(categories.deletedAt)));
     if (!cat) throw new BadRequestException({ message: 'Unknown category.', reason: 'unknown_category' });
+    if (input.defaultUserId) {
+      const [u] = await this.db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.id, input.defaultUserId), eq(users.isActive, true), isNull(users.deletedAt)));
+      if (!u) throw new BadRequestException({ message: 'Unknown or inactive user.', reason: 'unknown_user' });
+    }
     if (input.crmDatabaseIds.length) {
       const found = await this.db
         .select({ id: crmDatabases.id })
@@ -281,7 +298,7 @@ export class MailboxesService {
 }
 
 /** Never includes credentials. */
-export function publicMailbox(r: MailboxRow, crmDatabaseIds: string[]) {
+export function publicMailbox(r: MailboxRow, crmDatabaseIds: string[], defaultCategoryTitle?: string) {
   return {
     id: r.id,
     title: r.title,
@@ -289,6 +306,8 @@ export function publicMailbox(r: MailboxRow, crmDatabaseIds: string[]) {
     senderName: r.senderName,
     provider: r.provider,
     defaultCategoryId: r.defaultCategoryId,
+    defaultCategoryTitle: defaultCategoryTitle ?? '',
+    defaultUserId: r.defaultUserId,
     headerThreading: r.headerThreading,
     active: r.active,
     autoResponseEnabled: r.autoResponseEnabled,

@@ -1,0 +1,2 @@
+ALTER TABLE "mailbox_queues" ADD COLUMN "default_user_id" uuid;--> statement-breakpoint
+ALTER TABLE "mailbox_queues" ADD CONSTRAINT "mailbox_queues_default_user_id_users_id_fk" FOREIGN KEY ("default_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;

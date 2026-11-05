@@ -3,6 +3,8 @@
  * so the app can run as a static page with no server. Reads come from `demo-data.json`;
  * changes are refused with a clear message.
  */
+import { matchesConditions, type FilterCondition, type FilterFieldDef } from '@relay-desk/domain';
+
 export const DEMO = import.meta.env.VITE_DEMO === '1';
 
 interface Recording {
@@ -66,6 +68,58 @@ export async function installDemo() {
     return { status: best.status, body: q ? filterByText(best.body, q) : best.body };
   };
 
+  /**
+   * The ticket list with the view's and the filter's conditions applied to the recorded
+   * tickets, using the same matching rules as the server (domain `matchesConditions`).
+   */
+  const ticketList = (u: URL) => {
+    const full = byPath.get('/api/tickets')?.find((c) => !c.params.has('viewId') && !c.params.has('filter'));
+    const all = (full?.body as { items: Record<string, unknown>[] } | undefined)?.items ?? [];
+    const fields = ((get('/api/tickets/meta') as { filterFields?: FilterFieldDef[] } | undefined)?.filterFields ??
+      []) as FilterFieldDef[];
+    const me = (get('/api/auth/me') as { user?: { id: string } } | undefined)?.user?.id;
+    const sidebar = data['/api/tickets/views']?.body as
+      | {
+          teamViews?: { id: string; conditions: FilterCondition[] }[];
+          myViews?: { id: string; conditions: FilterCondition[] }[];
+        }
+      | undefined;
+    const conditions: FilterCondition[] = [];
+    const viewId = u.searchParams.get('viewId');
+    if (viewId) {
+      const v = [...(sidebar?.teamViews ?? []), ...(sidebar?.myViews ?? [])].find((x) => x.id === viewId);
+      conditions.push(...(v?.conditions ?? []));
+    }
+    try {
+      conditions.push(...((JSON.parse(u.searchParams.get('filter') ?? '[]') as FilterCondition[]) ?? []));
+    } catch {
+      // an unreadable filter is ignored
+    }
+    const resolved = conditions.map((c) => (c.value === '@me' && me ? { ...c, value: me } : c));
+    const flat = (t: Record<string, unknown>) => ({
+      ...t,
+      ...Object.fromEntries(
+        Object.entries((t.customFields as Record<string, unknown> | undefined) ?? {}).map(([k, v]) => [
+          `custom.${k}`,
+          v,
+        ]),
+      ),
+    });
+    let items = all.filter((t) => matchesConditions(flat(t), fields, resolved));
+    const q = u.searchParams.get('q');
+    if (q) items = (filterByText({ items }, q) as { items: Record<string, unknown>[] }).items;
+    const sort = u.searchParams.get('sort');
+    if (sort) {
+      const dir = u.searchParams.get('dir') === 'desc' ? -1 : 1;
+      items = [...items].sort((a, b) =>
+        String(a[sort] ?? '') < String(b[sort] ?? '') ? -dir : String(a[sort] ?? '') > String(b[sort] ?? '') ? dir : 0,
+      );
+    }
+    const pageSize = Number(u.searchParams.get('pageSize') ?? 50) || 50;
+    const page = Number(u.searchParams.get('page') ?? 1) || 1;
+    return { items: items.slice((page - 1) * pageSize, page * pageSize), total: items.length, page, pageSize };
+  };
+
   /** Global search over the recorded lists. */
   const search = (q: string) => {
     const tickets = (get('/api/tickets') as { items: { id: number; title: string }[] } | undefined)?.items ?? [];
@@ -102,6 +156,7 @@ export async function installDemo() {
     const method = (init?.method ?? 'GET').toUpperCase();
     if (method === 'GET') {
       if (u.pathname === '/api/search') return json(200, search(u.searchParams.get('q') ?? ''));
+      if (u.pathname === '/api/tickets' && get('/api/tickets')) return json(200, ticketList(u));
       const hit = lookup(u);
       return hit
         ? json(hit.status, hit.body)
