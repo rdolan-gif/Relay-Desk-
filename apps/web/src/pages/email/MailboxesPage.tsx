@@ -33,6 +33,7 @@ interface Mailbox {
   senderName: string;
   provider: 'gmail' | 'fake';
   defaultCategoryId: string;
+  defaultCategoryTitle: string;
   defaultUserId: string | null;
   headerThreading: boolean;
   active: boolean;
@@ -47,7 +48,9 @@ interface Mailbox {
   lastSyncAt: string | null;
   lastError: string | null;
 }
-type Draft = Omit<Mailbox, 'id' | 'connected' | 'connectedAs' | 'lastSyncAt' | 'lastError'> & { id?: string };
+type Draft = Omit<Mailbox, 'id' | 'connected' | 'connectedAs' | 'lastSyncAt' | 'lastError' | 'defaultCategoryTitle'> & {
+  id?: string;
+};
 const EMPTY = (categoryId: string): Draft => ({
   title: '',
   address: '',
@@ -73,19 +76,19 @@ export function MailboxesPage() {
   const meta = useTicketMeta();
   const crm = useCrmMeta();
   const users = useUserDirectory();
-  // Every category, not only the ones this person works in: a mailbox can feed a personal
-  // inbox category the administrator doesn't see (falls back to their own categories).
-  const allCategories = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => api<{ id: string; title: string }[]>('GET', '/settings/categories'),
-    retry: false,
-  });
-  const categoryList = allCategories.data ?? meta.data?.categories ?? [];
   const list = useQuery({
     queryKey: ['mailbox-settings'],
     queryFn: () =>
       api<{ mailboxes: Mailbox[]; googleConfigured: boolean; redirectUri: string }>('GET', '/settings/mailboxes'),
   });
+  // A mailbox can feed a category this person doesn't work in (e.g. someone's personal inbox):
+  // the mailbox carries that category's name, and the list always includes it.
+  const categoryList = [
+    ...(meta.data?.categories ?? []),
+    ...(list.data?.mailboxes ?? [])
+      .filter((m) => !meta.data?.categories.some((c) => c.id === m.defaultCategoryId))
+      .map((m) => ({ id: m.defaultCategoryId, title: m.defaultCategoryTitle })),
+  ].filter((c, i, all) => all.findIndex((x) => x.id === c.id) === i);
   const templates = useQuery({ queryKey: ['templates-all'], queryFn: () => api<EmailTemplate[]>('GET', '/templates') });
   const [draft, setDraft] = useState<Draft | null>(null);
   const log = useQuery({

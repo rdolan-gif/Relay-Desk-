@@ -51,6 +51,7 @@ describe('email channel (spec 11)', () => {
       });
       expect(box.status).toBe(201);
       expect(box.body.defaultUserId).toBe(me);
+      expect(box.body.defaultCategoryTitle).toBe('Support');
       const personal = await receive(ctx.app, box.body.id, {
         from: 'buyer@example.com',
         to: 'alex@relaydesk.local',
