@@ -73,6 +73,14 @@ export function MailboxesPage() {
   const meta = useTicketMeta();
   const crm = useCrmMeta();
   const users = useUserDirectory();
+  // Every category, not only the ones this person works in: a mailbox can feed a personal
+  // inbox category the administrator doesn't see (falls back to their own categories).
+  const allCategories = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => api<{ id: string; title: string }[]>('GET', '/settings/categories'),
+    retry: false,
+  });
+  const categoryList = allCategories.data ?? meta.data?.categories ?? [];
   const list = useQuery({
     queryKey: ['mailbox-settings'],
     queryFn: () =>
@@ -124,7 +132,7 @@ export function MailboxesPage() {
       notifyError(err);
     }
   };
-  const category = (id: string) => meta.data?.categories.find((c) => c.id === id)?.title ?? id;
+  const category = (id: string) => categoryList.find((c) => c.id === id)?.title ?? id;
   const autoTemplates = (templates.data ?? [])
     .filter((x) => x.kind === 'auto_response')
     .map((x) => ({ value: x.id, label: x.title }));
@@ -249,7 +257,7 @@ export function MailboxesPage() {
             />
             <Select
               label={t.mailboxes.defaultCategory}
-              data={(meta.data?.categories ?? []).map((c) => ({ value: c.id, label: c.title }))}
+              data={categoryList.map((c) => ({ value: c.id, label: c.title }))}
               value={draft.defaultCategoryId}
               allowDeselect={false}
               searchable
