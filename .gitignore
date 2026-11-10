@@ -9,6 +9,8 @@ test-results/
 playwright-report/
 .DS_Store
 
-# Local file storage (STORAGE_DIR)
-data/
+# Local file storage (STORAGE_DIR). Anchored: a bare data/ also hid src/data source folders.
+/apps/api/data/
+/e2e/data/
+/data/
 apps/web/dist-demo/
