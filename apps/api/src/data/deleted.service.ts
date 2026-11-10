@@ -39,7 +39,10 @@ export class BulkService {
         await fn(id);
         done.push(id);
       } catch (err) {
-        failed.push({ id, message: (err as { response?: { message?: string } }).response?.message ?? (err as Error).message });
+        failed.push({
+          id,
+          message: (err as { response?: { message?: string } }).response?.message ?? (err as Error).message,
+        });
       }
       if (progress) await progress(++n);
     }
@@ -47,7 +50,13 @@ export class BulkService {
   }
 
   /** Up to 200 at once; more runs as a job with progress. */
-  private async runMaybeAsJob<T>(auth: AuthContext, kind: string, title: string, ids: T[], fn: (id: T) => Promise<unknown>) {
+  private async runMaybeAsJob<T>(
+    auth: AuthContext,
+    kind: string,
+    title: string,
+    ids: T[],
+    fn: (id: T) => Promise<unknown>,
+  ) {
     if (ids.length <= JOB_THRESHOLD) return this.each(ids, fn);
     const job = await this.jobs.start(auth, kind, title, { count: ids.length }, async (ctx) => {
       await ctx.progress(0, ids.length);
@@ -57,8 +66,14 @@ export class BulkService {
     return { job };
   }
 
-  async bulkEditTickets(auth: AuthContext, ids: number[], changes: Omit<TicketInput, 'version' | 'customFields' | 'followerIds'>) {
-    const r = await this.runMaybeAsJob(auth, 'bulk_edit', `Bulk edit of ${ids.length} tickets`, ids, (id) => this.tickets.update(auth, id, changes, 'bulk'));
+  async bulkEditTickets(
+    auth: AuthContext,
+    ids: number[],
+    changes: Omit<TicketInput, 'version' | 'customFields' | 'followerIds'>,
+  ) {
+    const r = await this.runMaybeAsJob(auth, 'bulk_edit', `Bulk edit of ${ids.length} tickets`, ids, (id) =>
+      this.tickets.update(auth, id, changes, 'bulk'),
+    );
     return 'job' in r ? r : { updated: r.done, failed: r.failed };
   }
 
@@ -69,7 +84,13 @@ export class BulkService {
         : type === 'contacts'
           ? (id: string | number) => this.contacts.remove(auth, String(id))
           : (id: string | number) => this.accounts.remove(auth, String(id));
-    await this.audit.record({ eventType: 'delete.run', actorUserId: auth.user.id, ip, targetType: type, details: { count: ids.length } });
+    await this.audit.record({
+      eventType: 'delete.run',
+      actorUserId: auth.user.id,
+      ip,
+      targetType: type,
+      details: { count: ids.length },
+    });
     const r = await this.runMaybeAsJob(auth, `bulk_delete_${type}`, `Delete ${ids.length} ${type}`, ids, fn);
     return 'job' in r ? r : { deleted: r.done, failed: r.failed };
   }
@@ -108,12 +129,19 @@ export class BulkService {
     this.admin(auth);
     const now = new Date();
     if (type === 'tickets') {
-      const [t] = await this.db.select().from(tickets).where(eq(tickets.id, Number(id)));
-      if (!t || !canRestore(t.deletedAt, now) || t.isAnonymised) throw new NotFoundException({ message: 'This ticket can no longer be restored.', reason: 'not_restorable' });
+      const [t] = await this.db
+        .select()
+        .from(tickets)
+        .where(eq(tickets.id, Number(id)));
+      if (!t || !canRestore(t.deletedAt, now) || t.isAnonymised)
+        throw new NotFoundException({ message: 'This ticket can no longer be restored.', reason: 'not_restorable' });
       await this.db.transaction(async (tx) => {
         await tx.update(tickets).set({ deletedAt: null }).where(eq(tickets.id, t.id));
         await this.history.record(tx, auth, 'ticket', t.id, 'update', [{ field: 'deleted', old: true, new: false }]);
-        await this.audit.record({ eventType: 'delete.restored', actorUserId: auth.user.id, ip, targetType: 'ticket', targetId: id }, tx);
+        await this.audit.record(
+          { eventType: 'delete.restored', actorUserId: auth.user.id, ip, targetType: 'ticket', targetId: id },
+          tx,
+        );
       });
       return { restored: true };
     }
@@ -124,8 +152,13 @@ export class BulkService {
     if (!['contacts', 'accounts'].includes(type)) throw new BadRequestException();
     await this.db.transaction(async (tx) => {
       await tx.update(table).set({ deletedAt: null }).where(eq(table.id, id));
-      await this.history.record(tx, auth, type === 'contacts' ? 'contact' : 'account', id, 'update', [{ field: 'deleted', old: true, new: false }]);
-      await this.audit.record({ eventType: 'delete.restored', actorUserId: auth.user.id, ip, targetType: type.slice(0, -1), targetId: id }, tx);
+      await this.history.record(tx, auth, type === 'contacts' ? 'contact' : 'account', id, 'update', [
+        { field: 'deleted', old: true, new: false },
+      ]);
+      await this.audit.record(
+        { eventType: 'delete.restored', actorUserId: auth.user.id, ip, targetType: type.slice(0, -1), targetId: id },
+        tx,
+      );
     });
     return { restored: true };
   }

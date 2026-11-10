@@ -31,7 +31,11 @@ import { DataService, type ExportEntity } from './data.service';
 import { BulkService, type DeletedType } from './deleted.service';
 import { MergeService } from './merge.service';
 
-const MODULE: Record<ExportEntity, ModuleKey> = { contacts: 'crm_contacts', accounts: 'crm_accounts', tickets: 'tickets' };
+const MODULE: Record<ExportEntity, ModuleKey> = {
+  contacts: 'crm_contacts',
+  accounts: 'crm_accounts',
+  tickets: 'tickets',
+};
 const exportQuery = listQuerySchema.extend({
   format: z.enum(['csv', 'xlsx']).default('csv'),
   columns: z.string().max(5000).default(''),
@@ -46,13 +50,22 @@ const importSchema = z.object({
   duplicate: z.enum(['skip', 'update', 'create']).default('skip'),
   matchOn: z.enum(['email', 'phone']).default('email'),
 });
-const templateSchema = z.object({ entity, name: z.string().trim().min(1).max(100), mapping: z.record(z.string().max(200), z.string().max(200)) });
+const templateSchema = z.object({
+  entity,
+  name: z.string().trim().min(1).max(100),
+  mapping: z.record(z.string().max(200), z.string().max(200)),
+});
 const mergeSchema = z.object({
   survivorId: z.string().uuid(),
   ids: z.array(z.string().uuid()).min(2).max(20),
   choices: z.record(z.string().max(200), z.string().max(100)).default({}),
 });
-const idsSchema = z.object({ ids: z.array(z.union([z.string().uuid(), z.number().int().positive()])).min(1).max(5000) });
+const idsSchema = z.object({
+  ids: z
+    .array(z.union([z.string().uuid(), z.number().int().positive()]))
+    .min(1)
+    .max(5000),
+});
 const confirmSchema = z.object({ confirmation: z.string().max(100) });
 
 function need(auth: AuthContext, module: ModuleKey, verb: 'read' | 'update' | 'delete') {
@@ -95,7 +108,11 @@ export class DataController {
 
   @RequireFlag('can_export')
   @Post('exports/tickets/emails')
-  async exportEmails(@Auth() auth: AuthContext, @Req() req: AppRequest, @Body(new ZodPipe(exportQuery)) q: z.infer<typeof exportQuery>) {
+  async exportEmails(
+    @Auth() auth: AuthContext,
+    @Req() req: AppRequest,
+    @Body(new ZodPipe(exportQuery)) q: z.infer<typeof exportQuery>,
+  ) {
     need(auth, 'tickets', 'read');
     const extra = q.viewId ? await this.views.conditionsOf(auth, q.viewId) : [];
     const { format: _f, columns: _c, viewId: _v, ...list } = q;
@@ -107,14 +124,21 @@ export class DataController {
   @RequireFlag('can_import_crm_data')
   @Post('imports/upload')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 20 * 1024 * 1024 } }))
-  upload(@Auth() auth: AuthContext, @UploadedFile() file: { originalname: string; mimetype: string; buffer: Buffer } | undefined) {
+  upload(
+    @Auth() auth: AuthContext,
+    @UploadedFile() file: { originalname: string; mimetype: string; buffer: Buffer } | undefined,
+  ) {
     if (!file) throw new ForbiddenException({ message: 'No file received.', reason: 'no_file' });
     return this.data.upload(auth, file);
   }
 
   @RequireFlag('can_import_crm_data')
   @Post('imports')
-  runImport(@Auth() auth: AuthContext, @Req() req: AppRequest, @Body(new ZodPipe(importSchema)) body: z.infer<typeof importSchema>) {
+  runImport(
+    @Auth() auth: AuthContext,
+    @Req() req: AppRequest,
+    @Body(new ZodPipe(importSchema)) body: z.infer<typeof importSchema>,
+  ) {
     need(auth, body.entity === 'contacts' ? 'crm_contacts' : 'crm_accounts', 'update');
     return this.data.runImport(auth, body, clientIp(req));
   }
@@ -143,14 +167,22 @@ export class DataController {
   @RequireAccess('crm_contacts', 'update')
   @Post('crm/contacts/merge')
   @HttpCode(200)
-  mergeContacts(@Auth() auth: AuthContext, @Req() req: AppRequest, @Body(new ZodPipe(mergeSchema)) b: z.infer<typeof mergeSchema>) {
+  mergeContacts(
+    @Auth() auth: AuthContext,
+    @Req() req: AppRequest,
+    @Body(new ZodPipe(mergeSchema)) b: z.infer<typeof mergeSchema>,
+  ) {
     return this.merges.mergeContacts(auth, b.survivorId, b.ids, b.choices, clientIp(req));
   }
 
   @RequireAccess('crm_accounts', 'update')
   @Post('crm/accounts/merge')
   @HttpCode(200)
-  mergeAccounts(@Auth() auth: AuthContext, @Req() req: AppRequest, @Body(new ZodPipe(mergeSchema)) b: z.infer<typeof mergeSchema>) {
+  mergeAccounts(
+    @Auth() auth: AuthContext,
+    @Req() req: AppRequest,
+    @Body(new ZodPipe(mergeSchema)) b: z.infer<typeof mergeSchema>,
+  ) {
     return this.merges.mergeAccounts(auth, b.survivorId, b.ids, b.choices, clientIp(req));
   }
 
@@ -159,21 +191,33 @@ export class DataController {
   @RequireAccess('crm_contacts', 'delete')
   @Post('crm/contacts/bulk-delete')
   @HttpCode(200)
-  deleteContacts(@Auth() auth: AuthContext, @Req() req: AppRequest, @Body(new ZodPipe(idsSchema)) b: z.infer<typeof idsSchema>) {
+  deleteContacts(
+    @Auth() auth: AuthContext,
+    @Req() req: AppRequest,
+    @Body(new ZodPipe(idsSchema)) b: z.infer<typeof idsSchema>,
+  ) {
     return this.bulk.bulkDelete(auth, 'contacts', b.ids, clientIp(req));
   }
 
   @RequireAccess('crm_accounts', 'delete')
   @Post('crm/accounts/bulk-delete')
   @HttpCode(200)
-  deleteAccounts(@Auth() auth: AuthContext, @Req() req: AppRequest, @Body(new ZodPipe(idsSchema)) b: z.infer<typeof idsSchema>) {
+  deleteAccounts(
+    @Auth() auth: AuthContext,
+    @Req() req: AppRequest,
+    @Body(new ZodPipe(idsSchema)) b: z.infer<typeof idsSchema>,
+  ) {
     return this.bulk.bulkDelete(auth, 'accounts', b.ids, clientIp(req));
   }
 
   @RequireFlag('can_delete_tickets')
   @Post('tickets/bulk-delete')
   @HttpCode(200)
-  deleteTickets(@Auth() auth: AuthContext, @Req() req: AppRequest, @Body(new ZodPipe(idsSchema)) b: z.infer<typeof idsSchema>) {
+  deleteTickets(
+    @Auth() auth: AuthContext,
+    @Req() req: AppRequest,
+    @Body(new ZodPipe(idsSchema)) b: z.infer<typeof idsSchema>,
+  ) {
     need(auth, 'tickets', 'delete');
     return this.bulk.bulkDelete(auth, 'tickets', b.ids, clientIp(req));
   }
@@ -188,7 +232,12 @@ export class DataController {
   @Post('deleted/:type/:id/restore')
   @HttpCode(200)
   restore(@Auth() auth: AuthContext, @Req() req: AppRequest, @Param('type') type: string, @Param('id') id: string) {
-    return this.bulk.restore(auth, z.enum(['tickets', 'contacts', 'accounts']).parse(type) as DeletedType, id, clientIp(req));
+    return this.bulk.restore(
+      auth,
+      z.enum(['tickets', 'contacts', 'accounts']).parse(type) as DeletedType,
+      id,
+      clientIp(req),
+    );
   }
 
   // ----- GDPR (spec 14)
@@ -196,7 +245,12 @@ export class DataController {
   @RequireFlag('can_anonymise')
   @Post('tickets/:id/anonymise')
   @HttpCode(200)
-  anonymise(@Auth() auth: AuthContext, @Req() req: AppRequest, @Param('id', ParseIntPipe) id: number, @Body(new ZodPipe(confirmSchema)) b: z.infer<typeof confirmSchema>) {
+  anonymise(
+    @Auth() auth: AuthContext,
+    @Req() req: AppRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body(new ZodPipe(confirmSchema)) b: z.infer<typeof confirmSchema>,
+  ) {
     need(auth, 'tickets', 'update');
     return this.gdpr.anonymiseTicket(auth, id, b.confirmation, clientIp(req));
   }
@@ -204,7 +258,12 @@ export class DataController {
   @RequireFlag('can_anonymise')
   @Post('crm/contacts/:id/erase')
   @HttpCode(200)
-  erase(@Auth() auth: AuthContext, @Req() req: AppRequest, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(confirmSchema)) b: z.infer<typeof confirmSchema>) {
+  erase(
+    @Auth() auth: AuthContext,
+    @Req() req: AppRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(confirmSchema)) b: z.infer<typeof confirmSchema>,
+  ) {
     need(auth, 'crm_contacts', 'update');
     return this.gdpr.eraseContact(auth, id, b.confirmation, clientIp(req));
   }

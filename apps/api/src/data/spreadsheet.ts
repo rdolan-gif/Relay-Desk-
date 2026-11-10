@@ -49,7 +49,15 @@ export function ukDateTime(v: unknown, tz: string): string {
   if (Number.isNaN(d.getTime())) return '';
   let f = fmtCache.get(tz);
   if (!f) {
-    f = new Intl.DateTimeFormat('en-GB', { timeZone: tz, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    f = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz,
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
     fmtCache.set(tz, f);
   }
   return f.format(d).replace(',', '');
