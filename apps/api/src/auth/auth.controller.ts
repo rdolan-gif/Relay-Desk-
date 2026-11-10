@@ -1,4 +1,17 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Patch, Post, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpException,
+  Inject,
+  Patch,
+  Post,
+  Query,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { z } from 'zod';
@@ -10,6 +23,7 @@ import { clientIp, type AppRequest, type AuthContext } from '../common/request-c
 import { DB, type Db } from '../db/db';
 import { users } from '../db/schema';
 import { AuthService } from './auth.service';
+import { GOOGLE_SIGNIN_COOKIE, GoogleSignInRefused, GoogleSignInService } from './google-signin.service';
 import { Auth, AuthenticatedOnly, Public } from './decorators';
 import { SESSION_COOKIE } from './session.service';
 
@@ -30,7 +44,87 @@ export class AuthController {
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(CONFIG) private readonly config: AppConfig,
     @Inject(DB) private readonly db: Db,
+    @Inject(GoogleSignInService) private readonly google: GoogleSignInService,
   ) {}
+
+  private setSessionCookie(res: Response, session: { token: string; expiresAt: Date }) {
+    res.cookie(SESSION_COOKIE, session.token, {
+      httpOnly: true,
+      secure: this.config.COOKIE_SECURE,
+      sameSite: 'lax',
+      path: '/',
+      expires: session.expiresAt,
+    });
+  }
+
+  /** What the sign-in page offers: Google (and for which domain) and who may use a password. */
+  @Public()
+  @Get('options')
+  options() {
+    return {
+      google: this.google.enabled,
+      googleDomain: this.google.enabled ? this.google.domain : null,
+      password: this.config.PASSWORD_SIGNIN,
+    };
+  }
+
+  /** Starts "Sign in with Google": sends the browser to Google, limited to the Workspace domain. */
+  @Public()
+  @Get('google/start')
+  googleStart(@Res() res: Response) {
+    try {
+      const { url, nonce, maxAgeMs } = this.google.start();
+      res.cookie(GOOGLE_SIGNIN_COOKIE, nonce, {
+        httpOnly: true,
+        secure: this.config.COOKIE_SECURE,
+        sameSite: 'lax',
+        path: '/api/auth/google',
+        maxAge: maxAgeMs,
+      });
+      res.redirect(url);
+    } catch (err) {
+      res.redirect(this.signInPage({ signin_error: err instanceof GoogleSignInRefused ? err.code : 'google_refused' }));
+    }
+  }
+
+  /** Google sends the browser back here; on success it lands signed in on the home page. */
+  @Public()
+  @Get('google/callback')
+  async googleCallback(
+    @Query() q: { code?: string; state?: string; error?: string },
+    @Req() req: AppRequest,
+    @Res() res: Response,
+  ) {
+    const ip = clientIp(req);
+    const cookieNonce = (req.cookies as Record<string, string> | undefined)?.[GOOGLE_SIGNIN_COOKIE];
+    res.clearCookie(GOOGLE_SIGNIN_COOKIE, { path: '/api/auth/google' });
+    if (q.error || !q.code || !q.state) {
+      await this.auth.googleRefused(null, ip, q.error ? 'cancelled' : 'invalid_state');
+      return res.redirect(this.signInPage({ signin_error: q.error ? 'cancelled' : 'invalid_state' }));
+    }
+    let email: string;
+    try {
+      email = await this.google.finish(q.code, q.state, cookieNonce);
+    } catch (err) {
+      const code = err instanceof GoogleSignInRefused ? err.code : 'google_refused';
+      await this.auth.googleRefused(null, ip, code);
+      return res.redirect(this.signInPage({ signin_error: code }));
+    }
+    try {
+      const signedIn = await this.auth.loginWithGoogle(email, ip, req.header('user-agent') ?? null);
+      if (!signedIn) return res.redirect(this.signInPage({ signin_error: 'no_account' }));
+      this.setSessionCookie(res, signedIn.session);
+      return res.redirect(this.signInPage({}));
+    } catch (err) {
+      const code = err instanceof HttpException && err.getStatus() === 429 ? 'rate_limited' : 'google_refused';
+      return res.redirect(this.signInPage({ signin_error: code }));
+    }
+  }
+
+  private signInPage(params: Record<string, string>): string {
+    const q = new URLSearchParams(params).toString();
+    return `${this.config.PUBLIC_URL.replace(/\/$/, '')}/${q ? `?${q}` : ''}`;
+  }
 
   @Public()
   @Post('login')
@@ -41,13 +135,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { user, session } = await this.auth.login(body, clientIp(req), req.header('user-agent') ?? null);
-    res.cookie(SESSION_COOKIE, session.token, {
-      httpOnly: true,
-      secure: this.config.COOKIE_SECURE,
-      sameSite: 'lax',
-      path: '/',
-      expires: session.expiresAt,
-    });
+    this.setSessionCookie(res, session);
     return {
       user: { id: user.id, email: user.email, name: user.name, type: user.type },
       csrfToken: session.csrfToken,
@@ -71,13 +159,17 @@ export class AuthController {
         totpEnabled: users.totpEnabled,
         timezone: users.timezone,
         apiTokenCreatedAt: users.apiTokenCreatedAt,
+        passwordHash: users.passwordHash,
       })
       .from(users)
       .where(eq(users.id, auth.user.id));
+    const { passwordHash, ...profile } = row ?? { passwordHash: null };
     return {
       user: {
         ...auth.user,
-        ...row,
+        ...profile,
+        // Staff on Google sign-in have no password to change.
+        hasPassword: !!passwordHash,
         signature: effectiveSignature(row?.signature ?? null, auth.user.name),
         hasCustomSignature: !!row?.signature?.trim(),
       },

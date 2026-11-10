@@ -18,6 +18,7 @@
     "db:seed": "pnpm --filter @relay-desk/api db:seed",
     "test:e2e": "pnpm --filter @relay-desk/e2e test:e2e",
     "format:check": "prettier --check .",
+    "db:install": "pnpm --filter @relay-desk/api db:install",
     "db:setup:support": "pnpm --filter @relay-desk/api db:setup:support"
   },
   "devDependencies": {

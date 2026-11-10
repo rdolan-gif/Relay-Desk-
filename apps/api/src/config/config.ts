@@ -23,6 +23,21 @@ const schema = z.object({
   /** Google OAuth client for the Gmail API (owner O-2, O-10). */
   GOOGLE_CLIENT_ID: z.string().default(''),
   GOOGLE_CLIENT_SECRET: z.string().default(''),
+  /**
+   * Staff sign in with Google accounts on this Workspace domain only, e.g. "ricoman.com".
+   * Empty turns Google sign-in off. Uses the same Google OAuth client as Gmail.
+   */
+  GOOGLE_SIGNIN_DOMAIN: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^$|^[a-z0-9.-]+\.[a-z]{2,}$/, 'GOOGLE_SIGNIN_DOMAIN must be a domain such as ricoman.com')
+    .default(''),
+  /**
+   * Who may sign in with a password: "all"; "administrators" (only administrators who have
+   * two-factor on, as an emergency way in when Google is unavailable); or "none".
+   */
+  PASSWORD_SIGNIN: z.enum(['all', 'administrators', 'none']).default('all'),
   /** Where raw emails and attachments are stored on disk. */
   STORAGE_DIR: z.string().default('./data/storage'),
   /** How often each mailbox is checked for new mail. */
@@ -37,6 +52,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const config = schema.parse(env);
   if (config.NODE_ENV === 'production' && config.ENCRYPTION_KEY === 'ZGV2LW9ubHktZW5jcnlwdGlvbi1rZXktMzItYnl0ZXM=') {
     throw new Error('ENCRYPTION_KEY must be set in production');
+  }
+  if (config.GOOGLE_SIGNIN_DOMAIN && !(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET)) {
+    throw new Error('GOOGLE_SIGNIN_DOMAIN needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET');
+  }
+  if (config.PASSWORD_SIGNIN !== 'all' && !config.GOOGLE_SIGNIN_DOMAIN) {
+    throw new Error('PASSWORD_SIGNIN can only be limited when Google sign-in is on (GOOGLE_SIGNIN_DOMAIN)');
   }
   return config;
 }

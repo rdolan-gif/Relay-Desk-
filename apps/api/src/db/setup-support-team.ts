@@ -261,7 +261,10 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
     const [row] = await db
       .select()
       .from(mailboxQueues)
-      .where(and(eq(mailboxQueues.address, address), isNull(mailboxQueues.deletedAt)));
+      // By name too: an address corrected later (e.g. by the first install) is still the same inbox.
+      .where(
+        and(or(eq(mailboxQueues.address, address), eq(mailboxQueues.title, title)), isNull(mailboxQueues.deletedAt)),
+      );
     if (row) return row.id;
     const [m] = await db
       .insert(mailboxQueues)
