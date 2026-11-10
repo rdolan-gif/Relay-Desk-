@@ -328,8 +328,11 @@ async function seedCrm(db: Db, standardAgentRightsId: string) {
 }
 
 if (require.main === module) {
-  if (process.env.NODE_ENV === 'production' && !process.env.SEED_PASSWORD) {
-    console.error('Refusing to seed production without SEED_PASSWORD');
+  // Demo data (test accounts, made-up customers and tickets) never goes on a live server.
+  if (process.env.NODE_ENV === 'production') {
+    console.error(
+      'Refusing to add demo data in production. For a live install use: pnpm db:install (docs/setup/go-live.md)',
+    );
     process.exit(1);
   }
   const pool = createPool(process.env.DATABASE_URL ?? 'postgres://relay:relay@localhost:5432/relay_desk');

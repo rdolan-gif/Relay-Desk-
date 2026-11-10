@@ -18,10 +18,8 @@ export interface TestContext {
   close: () => Promise<void>;
 }
 
-/** Fresh app over a truncated, re-seeded test database. */
-export async function createTestContext(): Promise<TestContext> {
-  const pool = createPool(TEST_DATABASE_URL);
-  const db = createDb(pool);
+/** Empties every table (tests only: TEST_DATABASE_URL is wiped). */
+export async function resetDatabase(db: ReturnType<typeof createDb>) {
   await db.execute(sql`
     TRUNCATE inbound_log, email_messages, attachments, email_templates, routing_rules, rights_profile_mailboxes,
       mailbox_queue_crm_databases, mailbox_queues, ticket_merges, sidebar_items, rights_profile_ticket_views, ticket_views, activities, ticket_favourites,
@@ -34,13 +32,24 @@ export async function createTestContext(): Promise<TestContext> {
       ticket_reads, sla_definitions, time_groups, jobs, import_templates, kb_article_versions, kb_articles, rights_profile_kb_folders, kb_folders,
       users, access_profiles, rights_profiles RESTART IDENTITY CASCADE
   `);
-  const ids = await seed(db, PASSWORD);
+}
+
+/** Fresh app over a truncated, re-seeded test database. */
+export async function createTestContext(
+  env: Record<string, string> = {},
+  opts: { seed?: (db: ReturnType<typeof createDb>) => Promise<unknown> } = {},
+): Promise<TestContext> {
+  const pool = createPool(TEST_DATABASE_URL);
+  const db = createDb(pool);
+  await resetDatabase(db);
+  const ids = (opts.seed ? await opts.seed(db) : await seed(db, PASSWORD)) as Awaited<ReturnType<typeof seed>>;
   await pool.end();
 
   const config = loadConfig({
     NODE_ENV: 'test',
     DATABASE_URL: TEST_DATABASE_URL,
     STORAGE_DIR: `${tmpdir()}/relay-desk-test-storage`,
+    ...env,
   } as NodeJS.ProcessEnv);
   const app = await createApp(config, { logger: false });
   await app.init();

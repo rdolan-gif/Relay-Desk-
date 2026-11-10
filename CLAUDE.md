@@ -18,6 +18,7 @@ Progress and the test for each acceptance criterion: `docs/progress.md`.
 - Phase 5 (notifications, presence, macros): **done**
 - Phase 6 (search, bulk, import/export, merge, GDPR): **done**
 - Phase 7 (reporting and knowledge base; portal deferred, owner S-8): **done**
+- Go-live: Google sign-in (O-26) and `pnpm db:install` (O-27) built; steps in `docs/setup/go-live.md`
 - Next: Phase 8 (QOL and hardening) — **on hold until the owner sends the QOL list**
 
 ## Stack
@@ -41,6 +42,7 @@ pnpm build            # domain must be built before api/web typecheck (types com
 pnpm db:migrate       # apply drizzle migrations to DATABASE_URL
 pnpm db:seed          # idempotent demo data; dev password harbour-lantern-violet-42
 pnpm db:setup:support # the Support team's categories, rights and views (add `-- --demo` for demo people/tickets)
+pnpm db:install       # live first install, no demo data (docs/setup/go-live.md)
 pnpm dev:api          # http://localhost:3000/api (tsx watch)
 pnpm dev:web          # http://localhost:5173 (proxies /api to :3000)
 pnpm lint && pnpm typecheck

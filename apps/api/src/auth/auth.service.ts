@@ -16,6 +16,7 @@ import {
   userTypeCanUseInternalApp,
 } from '@relay-desk/domain';
 import { AuditService } from '../audit/audit.service';
+import { CONFIG, type AppConfig } from '../config/config';
 import { SECRET_BOX, SecretBox, randomToken, sha256 } from '../common/crypto';
 import { DB, type Db } from '../db/db';
 import { loginAttempts, users } from '../db/schema';
@@ -43,6 +44,7 @@ export class AuthService {
     @Inject(SessionService) private readonly sessions: SessionService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(SECRET_BOX) private readonly secrets: SecretBox,
+    @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
   async login(input: LoginInput, ip: string | null, userAgent: string | null) {
@@ -63,6 +65,24 @@ export class AuthService {
         !user ? 'unknown_user' : !passwordOk ? 'bad_password' : 'not_allowed',
       );
       throw INVALID();
+    }
+
+    // With Google sign-in on, passwords can be limited (PASSWORD_SIGNIN). Checked only after the
+    // password is right, so the answer never reveals whether an account exists.
+    const policy = this.config.PASSWORD_SIGNIN;
+    if (policy === 'none' || (policy === 'administrators' && user.type !== 'administrator')) {
+      await this.recordFailure(email, ip, user.id, 'password_signin_disabled');
+      throw new UnauthorizedException({
+        message: 'Sign in with your Google account instead.',
+        reason: 'use_google_signin',
+      });
+    }
+    if (policy === 'administrators' && !user.totpEnabled) {
+      await this.recordFailure(email, ip, user.id, 'emergency_needs_2fa');
+      throw new UnauthorizedException({
+        message: 'Password sign-in is only for administrators with two-factor turned on. Sign in with Google.',
+        reason: 'use_google_signin',
+      });
     }
 
     if (user.totpEnabled) {
@@ -89,6 +109,40 @@ export class AuthService {
       targetId: user.id,
     });
     return { user, session };
+  }
+
+  /**
+   * Signs in someone Google has vouched for (email already checked for the allowed domain).
+   * Only existing, active staff accounts: Google sign-in never creates one. Google handles
+   * the second factor, so Relay Desk's own two-factor code is not asked for.
+   */
+  async loginWithGoogle(email: string, ip: string | null, userAgent: string | null) {
+    const address = normaliseEmail(email);
+    await this.assertNotThrottled(address, ip);
+    const [user] = await this.db
+      .select()
+      .from(users)
+      .where(and(eq(users.email, address), isNull(users.deletedAt)));
+    if (!user || !user.isActive || !userTypeCanUseInternalApp(user.type)) {
+      await this.recordFailure(address, ip, user?.id ?? null, !user ? 'google_no_account' : 'google_not_allowed');
+      return null;
+    }
+    await this.db.insert(loginAttempts).values({ email: address, ip, succeeded: true });
+    const session = await this.sessions.create(user.id, ip, userAgent);
+    await this.audit.record({
+      eventType: 'auth.login_succeeded',
+      actorUserId: user.id,
+      ip,
+      targetType: 'user',
+      targetId: user.id,
+      details: { method: 'google' },
+    });
+    return { user, session };
+  }
+
+  /** Records a Google sign-in refused before an account was looked up (bad state, wrong domain…). */
+  async googleRefused(email: string | null, ip: string | null, cause: string) {
+    await this.recordFailure(email ?? '(google)', ip, null, `google_${cause}`);
   }
 
   async logout(sessionId: string, userId: string, ip: string | null) {

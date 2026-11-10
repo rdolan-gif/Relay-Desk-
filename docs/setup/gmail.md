@@ -28,9 +28,15 @@ This is a one-off job for whoever administers Ricoman's Google Workspace (about 
 
 1. **APIs & Services › Credentials › Create credentials › OAuth client ID**.
 2. Application type: **Web application**, name **Relay Desk**.
-3. **Authorised redirect URI**: `<PUBLIC_URL>/api/oauth/google/callback`, for example
-   `https://helpdesk.ricoman.com/api/oauth/google/callback`. Settings › Mailboxes in Relay
-   Desk shows the exact address to paste while Google is not yet set up.
+3. **Authorised redirect URIs**: add both of these (the first connects inboxes, the second is
+   staff sign-in with Google):
+   - `<PUBLIC_URL>/api/oauth/google/callback`
+   - `<PUBLIC_URL>/api/auth/google/callback`
+
+   For example `https://support.ricoman.com/api/oauth/google/callback` and
+   `https://support.ricoman.com/api/auth/google/callback`. Settings › Mailboxes in Relay Desk
+   shows the first exact address while Google is not yet set up.
+
 4. Copy the **Client ID** and **Client secret**.
 
 ## 4. Configure Relay Desk
@@ -42,13 +48,15 @@ Set these on the server (in `.env` or the `api` service's environment) and resta
 | `PUBLIC_URL`           | The address staff use, e.g. `https://helpdesk.ricoman.com`     |
 | `GOOGLE_CLIENT_ID`     | From step 3                                                    |
 | `GOOGLE_CLIENT_SECRET` | From step 3                                                    |
+| `GOOGLE_SIGNIN_DOMAIN` | `ricoman.com`: staff sign in with their work Google account    |
+| `PASSWORD_SIGNIN`      | `administrators`: passwords only as an emergency way in        |
 | `ENCRYPTION_KEY`       | Already set; the Gmail access is stored encrypted with it      |
 | `MAIL_POLL_SECONDS`    | Optional; how often to check for new mail (default 60 seconds) |
 
 ## 5. Connect each inbox
 
-`pnpm db:setup:support` creates the four mailboxes (support@, ryan@, thierry@ and
-heather@ricoman.com). For each one:
+The first install (`pnpm db:install`, see `go-live.md`) creates the four mailboxes: support@ricoman.com
+and each person's own address for their personal inbox. For each one:
 
 1. An administrator opens **Settings › Mailboxes** and clicks **Connect Gmail**.
 2. Google asks which account to use. **Sign in as the inbox itself** (for example

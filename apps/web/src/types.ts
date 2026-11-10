@@ -9,6 +9,7 @@ export interface Me {
     signature: string;
     hasCustomSignature: boolean;
     totpEnabled: boolean;
+    hasPassword?: boolean;
     timezone: string;
     apiTokenCreatedAt: string | null;
   };

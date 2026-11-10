@@ -6,6 +6,7 @@ import { AuditService } from './audit/audit.service';
 import { AuthController } from './auth/auth.controller';
 import { AuthGuard } from './auth/auth.guard';
 import { AuthService } from './auth/auth.service';
+import { GoogleSignInService } from './auth/google-signin.service';
 import { PasswordService } from './auth/password.service';
 import { PermissionsService } from './auth/permissions.service';
 import { SessionService } from './auth/session.service';
@@ -169,6 +170,7 @@ export class AppModule {
         SessionService,
         PermissionsService,
         AuthService,
+        GoogleSignInService,
         ProfilesService,
         UsersService,
         HistoryService,

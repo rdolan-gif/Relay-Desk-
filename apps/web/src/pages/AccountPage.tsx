@@ -22,13 +22,13 @@ import { t } from '../i18n/en-GB';
 import { notifyError, notifyOk } from '../notify';
 
 export function AccountPage() {
-  const { can } = useAuth();
+  const { can, me } = useAuth();
   return (
     <Stack maw={720}>
       <Title order={2}>{t.account.title}</Title>
       <SignatureSection />
       {can('tickets', 'read') && <NotificationRulesSection />}
-      <PasswordSection />
+      {me?.user.hasPassword !== false && <PasswordSection />}
       <TotpSection />
       <ApiTokenSection />
     </Stack>
