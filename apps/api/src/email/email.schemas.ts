@@ -7,6 +7,7 @@ export const mailboxSchema = z.object({
   senderName: z.string().trim().max(200).default(''),
   provider: z.enum(['gmail', 'fake']).default('gmail'),
   defaultCategoryId: z.string().uuid(),
+  defaultUserId: z.string().uuid().nullable().default(null),
   headerThreading: z.boolean().default(true),
   active: z.boolean().default(true),
   autoResponseEnabled: z.boolean().default(false),

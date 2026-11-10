@@ -19,7 +19,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth';
-import { useCrmMeta } from '../../crm/hooks';
+import { useCrmMeta, useUserDirectory } from '../../crm/hooks';
 import type { EmailTemplate } from '../../email/types';
 import { formatDateTime } from '../../format';
 import { t } from '../../i18n/en-GB';
@@ -33,6 +33,8 @@ interface Mailbox {
   senderName: string;
   provider: 'gmail' | 'fake';
   defaultCategoryId: string;
+  defaultCategoryTitle: string;
+  defaultUserId: string | null;
   headerThreading: boolean;
   active: boolean;
   autoResponseEnabled: boolean;
@@ -46,13 +48,16 @@ interface Mailbox {
   lastSyncAt: string | null;
   lastError: string | null;
 }
-type Draft = Omit<Mailbox, 'id' | 'connected' | 'connectedAs' | 'lastSyncAt' | 'lastError'> & { id?: string };
+type Draft = Omit<Mailbox, 'id' | 'connected' | 'connectedAs' | 'lastSyncAt' | 'lastError' | 'defaultCategoryTitle'> & {
+  id?: string;
+};
 const EMPTY = (categoryId: string): Draft => ({
   title: '',
   address: '',
   senderName: '',
   provider: 'gmail',
   defaultCategoryId: categoryId,
+  defaultUserId: null,
   headerThreading: true,
   active: true,
   autoResponseEnabled: false,
@@ -70,11 +75,20 @@ export function MailboxesPage() {
   const [params, setParams] = useSearchParams();
   const meta = useTicketMeta();
   const crm = useCrmMeta();
+  const users = useUserDirectory();
   const list = useQuery({
     queryKey: ['mailbox-settings'],
     queryFn: () =>
       api<{ mailboxes: Mailbox[]; googleConfigured: boolean; redirectUri: string }>('GET', '/settings/mailboxes'),
   });
+  // A mailbox can feed a category this person doesn't work in (e.g. someone's personal inbox):
+  // the mailbox carries that category's name, and the list always includes it.
+  const categoryList = [
+    ...(meta.data?.categories ?? []),
+    ...(list.data?.mailboxes ?? [])
+      .filter((m) => !meta.data?.categories.some((c) => c.id === m.defaultCategoryId))
+      .map((m) => ({ id: m.defaultCategoryId, title: m.defaultCategoryTitle })),
+  ].filter((c, i, all) => all.findIndex((x) => x.id === c.id) === i);
   const templates = useQuery({ queryKey: ['templates-all'], queryFn: () => api<EmailTemplate[]>('GET', '/templates') });
   const [draft, setDraft] = useState<Draft | null>(null);
   const log = useQuery({
@@ -121,7 +135,7 @@ export function MailboxesPage() {
       notifyError(err);
     }
   };
-  const category = (id: string) => meta.data?.categories.find((c) => c.id === id)?.title ?? id;
+  const category = (id: string) => categoryList.find((c) => c.id === id)?.title ?? id;
   const autoTemplates = (templates.data ?? [])
     .filter((x) => x.kind === 'auto_response')
     .map((x) => ({ value: x.id, label: x.title }));
@@ -246,11 +260,21 @@ export function MailboxesPage() {
             />
             <Select
               label={t.mailboxes.defaultCategory}
-              data={(meta.data?.categories ?? []).map((c) => ({ value: c.id, label: c.title }))}
+              data={categoryList.map((c) => ({ value: c.id, label: c.title }))}
               value={draft.defaultCategoryId}
               allowDeselect={false}
               searchable
               onChange={(v) => v && setDraft({ ...draft, defaultCategoryId: v })}
+            />
+            <Select
+              label={t.mailboxes.defaultUser}
+              description={t.mailboxes.defaultUserHelp}
+              placeholder={t.mailboxes.noDefaultUser}
+              data={(users.data ?? []).map((u) => ({ value: u.id, label: u.name }))}
+              value={draft.defaultUserId ?? null}
+              clearable
+              searchable
+              onChange={(v) => setDraft({ ...draft, defaultUserId: v })}
             />
             <MultiSelect
               label={t.mailboxes.crmDatabases}

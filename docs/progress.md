@@ -15,6 +15,10 @@
 | Back to tickets returns to the list the agent came from (O-20)                                                              | `e2e/tests/owner-requests.spec.ts`                                                     |
 | Save / Save and close ticket on notes; Send and close ticket on emails; a refused close keeps the note and says why (O-21)  | `e2e/tests/owner-requests.spec.ts`                                                     |
 | Fix: views filtering on an empty person field (e.g. Unassigned) failed with a database error                                | `apps/api/test/owner-requests.test.ts`                                                 |
+| Ricoman setup: Richard and Ryan administrators; admin-only Unassigned view without personal inboxes (O-22, O-23)            | `apps/api/test/owner-requests.test.ts`                                                 |
+| Person views show tickets assigned to that person, not the label category (O-24)                                            | `apps/api/test/owner-requests.test.ts`                                                 |
+| Personal inboxes assign new mail to their owner; it shows only in their "… Tickets" view (O-25)                             | `apps/api/test/email.test.ts`, `apps/api/test/owner-requests.test.ts`                  |
+| Demo: views and filters apply to the recorded tickets with the server's matching rules                                      | checked by hand in the demo build                                                      |
 
 ## Phase 7 — Reporting and knowledge base ✅ (portal deferred, owner S-8)
 

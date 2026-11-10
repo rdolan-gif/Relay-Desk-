@@ -191,7 +191,8 @@ export class InboundService {
           categoryId: routing.actions.categoryId ?? box.defaultCategoryId,
           state: routing.actions.state ?? 'open',
           priority: routing.actions.priority ?? 'normal',
-          userId: routing.actions.userId ?? null,
+          // A routing rule wins; otherwise the mailbox's owner (e.g. a personal inbox, O-25).
+          userId: routing.actions.userId ?? box.defaultUserId ?? null,
           contactId: contact?.id ?? null,
           statusIds: routing.actions.statusIds ?? [],
           customFields: routing.actions.customFields ?? {},

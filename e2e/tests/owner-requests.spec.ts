@@ -73,9 +73,13 @@ test('My views: drag to reorder asks to save; swipe left reveals a bin that asks
   await page.mouse.move(a.x + a.width / 2, b.y + b.height / 2 + 12, { steps: 12 });
   await expect(handles.first()).toHaveAttribute('aria-pressed', 'true'); // the drag is live
   await page.mouse.up();
-  await expect(page.getByRole('dialog', { name: 'Save changes?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Save changes' }).last().click();
-  await expect(page.getByRole('dialog', { name: 'Save changes?' })).toBeHidden();
+  const saveDialog = page.getByRole('dialog', { name: 'Save changes?' });
+  await expect(saveDialog).toBeVisible();
+  // The button shows as busy (and ignores clicks) while an earlier sidebar save finishes.
+  const save = saveDialog.getByRole('button', { name: 'Save changes' });
+  await expect(save).not.toHaveAttribute('data-loading', 'true');
+  await save.click();
+  await expect(saveDialog).toBeHidden({ timeout: 10_000 });
   await page.reload();
   await expect(handles.nth(1)).toHaveAttribute('aria-label', `Drag to reorder: ${firstName}`);
 
