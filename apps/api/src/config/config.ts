@@ -10,6 +10,15 @@ const schema = z.object({
     .string()
     .refine((v) => Buffer.from(v, 'base64').length === 32, 'ENCRYPTION_KEY must be 32 bytes, base64')
     .default('ZGV2LW9ubHktZW5jcnlwdGlvbi1rZXktMzItYnl0ZXM='),
+  /**
+   * Which proxies in front of the API to trust for the visitor's real IP (sign-in lock-outs and
+   * the audit log use it). The default covers this machine and private networks, e.g. the web
+   * container in Docker. A number means that many proxy hops. See Express "trust proxy".
+   */
+  TRUST_PROXY: z
+    .string()
+    .default('loopback, linklocal, uniquelocal')
+    .transform((v) => (/^\d+$/.test(v.trim()) ? Number(v.trim()) : v)),
   /** Set true behind TLS so cookies get the Secure flag. */
   COOKIE_SECURE: z
     .enum(['true', 'false'])

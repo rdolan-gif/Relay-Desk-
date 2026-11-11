@@ -61,6 +61,8 @@ test('a deleted ticket can be restored by an administrator', async ({ page }) =>
 
   await page.goto('/tickets');
   await page.getByPlaceholder('Search…').fill(title);
+  // Wait for the search to settle: ticking a row while the list is still refreshing is undone.
+  await expect(page.getByRole('row')).toHaveCount(2); // header + this ticket
   await page.getByLabel(`Select ${id}`).check();
   page.once('dialog', (d) => void d.accept());
   await page.getByRole('button', { name: 'Delete', exact: true }).click();

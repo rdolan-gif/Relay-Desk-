@@ -11,7 +11,7 @@ export async function createApp(config: AppConfig, opts: { logger?: boolean } = 
   const app = await NestFactory.create<NestExpressApplication>(AppModule.forRoot(config), {
     logger: opts.logger === false ? false : ['error', 'warn', 'log'],
   });
-  app.set('trust proxy', 'loopback');
+  app.set('trust proxy', config.TRUST_PROXY);
   app.use(helmet());
   app.use(cookieParser());
   app.enableCors({ origin: config.WEB_ORIGIN, credentials: true });
