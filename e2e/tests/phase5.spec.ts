@@ -55,11 +55,22 @@ test('assigning a ticket shows up in the bell straight away, and opens the ticke
   const title = `E2E notify ${Date.now()}`;
   const id = await newSupportTicket(admin, title, 'Alex Agent');
 
-  await expect(agent.getByRole('button', { name: 'Notifications (1 unread)' })).toBeVisible({ timeout: 10_000 });
-  await agent.getByRole('button', { name: 'Notifications (1 unread)' }).click();
+  // Other tests running alongside can notify the same agent, so look for this ticket's notice
+  // rather than an exact count.
+  const bell = agent.getByRole('button', { name: /^Notifications \(\d+ unread\)$/ });
+  await expect(bell).toBeVisible({ timeout: 10_000 });
+  await bell.click();
   await agent.locator('.mantine-Popover-dropdown').getByText(`#${id} was assigned to you`).click();
   await expect(agent.getByRole('heading', { name: title })).toBeVisible();
-  await expect(agent.getByRole('button', { name: 'Notifications' })).toBeVisible();
+  // Opening it marks that notification read.
+  await expect
+    .poll(async () => {
+      const list = (await (await agent.request.get('/api/me/notifications')).json()) as {
+        items: { ticketId: number | null; readAt: string | null }[];
+      };
+      return list.items.find((n) => n.ticketId === id)?.readAt ?? null;
+    })
+    .not.toBeNull();
 });
 
 test('an administrator manages macros in Settings', async ({ page }) => {

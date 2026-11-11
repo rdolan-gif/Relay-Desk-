@@ -1,0 +1,42 @@
+# Live server (support.ricoman.com). Settings come from .env next to this file; see
+# docs/setup/go-live.md. Run: docker compose -f docker-compose.prod.yml up -d --build
+#
+# The web app listens on 127.0.0.1:8080 only; put the server's HTTPS proxy (nginx, Caddy…)
+# in front of it for support.ricoman.com. The database is not reachable from outside.
+name: relay-desk
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: relay
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: relay_desk
+    volumes: ['pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U relay -d relay_desk']
+      interval: 5s
+      retries: 20
+
+  api:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://relay:${POSTGRES_PASSWORD}@postgres:5432/relay_desk
+      STORAGE_DIR: /data/storage
+    volumes: ['storage:/data']
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  web:
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    restart: unless-stopped
+    ports: ['127.0.0.1:8080:80']
+    depends_on: [api]
+
+volumes:
+  pgdata:
+  storage:

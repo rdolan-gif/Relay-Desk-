@@ -15,6 +15,8 @@ FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /out ./
+# Emails and attachments live here (a volume in docker-compose.prod.yml), owned by the app user.
+RUN mkdir -p /data/storage && chown -R node:node /data
 USER node
 EXPOSE 3000
 CMD ["sh", "-c", "node dist/db/migrate.js && node dist/main.js"]

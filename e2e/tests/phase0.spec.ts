@@ -27,7 +27,8 @@ test('an agent signs in and has no Settings area', async ({ page }) => {
 
 test('a wrong password shows an error', async ({ page }) => {
   await page.goto('/');
-  await page.getByLabel('Email').fill('backoffice@relaydesk.local');
+  // A fresh address each run: repeated failures for one address lock it for 15 minutes.
+  await page.getByLabel('Email').fill(`nobody-${Date.now()}@relaydesk.local`);
   await page.getByLabel('Password').fill('definitely-wrong-password');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('alert')).toContainText('Email or password is incorrect.');
