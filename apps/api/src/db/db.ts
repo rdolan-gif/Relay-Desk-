@@ -10,7 +10,11 @@ export const DB = Symbol('DB');
 export const PG_POOL = Symbol('PG_POOL');
 
 export function createPool(url: string): Pool {
-  return new Pool({ connectionString: url, max: 10 });
+  const pool = new Pool({ connectionString: url, max: 10 });
+  // An idle connection dropped by the database (restart, failover) must not crash the API;
+  // the pool opens a fresh one on the next query.
+  pool.on('error', (err) => console.error(`database connection lost: ${err.message}`));
+  return pool;
 }
 
 export function createDb(pool: Pool): Db {
