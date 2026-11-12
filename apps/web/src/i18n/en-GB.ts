@@ -402,6 +402,7 @@ export const t = {
       duplicate: 'Already processed',
       dropped_loop: 'Ignored (our own email)',
       bounce: 'Bounce',
+      failed: 'Could not import (kept in storage; see detail)',
     } as Record<string, string>,
     googleMissing:
       'Google sign-in is not set up yet. Your Google admin needs to create the OAuth client (see docs/setup/gmail.md); its redirect address is:',

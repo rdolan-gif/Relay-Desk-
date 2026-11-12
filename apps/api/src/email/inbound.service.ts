@@ -41,13 +41,31 @@ export type InboundOutcome =
   | { outcome: 'duplicate' }
   | { outcome: 'dropped_loop' }
   | { outcome: 'bounce'; matched: boolean }
+  | { outcome: 'failed'; error: string }
   | { outcome: 'appended' | 'created'; ticketId: number; activityId: string; autoResponded: boolean };
+
+/**
+ * Errors that come from the email itself (Postgres "data exception" or "integrity" classes,
+ * e.g. a byte the database can't store), not from a database or network outage. Such an email
+ * is logged as failed and skipped so it can't block every email after it; an outage is rethrown
+ * so the whole batch is retried on the next poll.
+ */
+function isBadMessageError(err: unknown): boolean {
+  for (let e: unknown = err; e && typeof e === 'object'; e = (e as { cause?: unknown }).cause) {
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === 'string' && /^2[23]/.test(code)) return true;
+  }
+  return false;
+}
+
+/** Postgres text can't hold NUL characters; some broken mailers send them. */
+const stripNul = <T>(v: T): T => (typeof v === 'string' ? (v.replaceAll('\u0000', '') as T) : v);
 
 const flatten = (a: AddressObject | AddressObject[] | undefined) =>
   (Array.isArray(a) ? a : a ? [a] : [])
     .flatMap((x) => x.value)
     .filter((v) => v.address)
-    .map((v) => ({ ...(v.name ? { name: v.name } : {}), address: v.address!.toLowerCase() }));
+    .map((v) => ({ ...(v.name ? { name: stripNul(v.name) } : {}), address: stripNul(v.address!.toLowerCase()) }));
 
 /**
  * The inbound pipeline (spec 11.2): fetch → store raw → loop/bounce check → thread →
@@ -82,12 +100,33 @@ export class InboundService {
     }
   }
 
+  /** Syncs in progress, per mailbox: the poll and "Sync now" must not import the same emails twice. */
+  private readonly syncing = new Map<string, Promise<InboundOutcome[]>>();
+
   async syncMailbox(queueId: string): Promise<InboundOutcome[]> {
+    const running = this.syncing.get(queueId);
+    if (running) return running;
+    const run = this.syncMailboxOnce(queueId).finally(() => this.syncing.delete(queueId));
+    this.syncing.set(queueId, run);
+    return run;
+  }
+
+  private async syncMailboxOnce(queueId: string): Promise<InboundOutcome[]> {
     const box = await this.mailboxes.find(queueId);
     try {
       const res = await this.providers[box.provider].fetchNew(this.mailboxes.ref(box));
       const outcomes: InboundOutcome[] = [];
-      for (const m of res.messages) outcomes.push(await this.processMessage(box, m));
+      for (const m of res.messages) {
+        try {
+          outcomes.push(await this.processMessage(box, m));
+        } catch (err) {
+          if (!isBadMessageError(err)) throw err;
+          const cause = (err as { cause?: { message?: string } }).cause?.message ?? String(err);
+          this.log.warn(`${box.address}: skipped message ${m.providerId}: ${cause}`);
+          await this.logOutcome(this.db, box.id, m.providerId, 'failed', null, null, cause.slice(0, 500));
+          outcomes.push({ outcome: 'failed', error: cause });
+        }
+      }
       await this.db
         .update(mailboxQueues)
         .set({ syncCursor: res.cursor, lastSyncAt: new Date(), lastError: null })
@@ -110,6 +149,9 @@ export class InboundService {
     if (seen) return { outcome: 'duplicate' };
 
     const parsed = await simpleParser(m.raw);
+    parsed.subject = stripNul(parsed.subject);
+    parsed.text = stripNul(parsed.text);
+    parsed.html = stripNul(parsed.html);
     const stored = await this.storage.put(`mail/${box.id}/in`, m.raw, 'eml');
     const from = flatten(parsed.from)[0] ?? { address: 'unknown@unknown' };
     const headers = Object.fromEntries([...parsed.headers.keys()].map((k) => [k.toLowerCase(), headerText(parsed, k)]));
