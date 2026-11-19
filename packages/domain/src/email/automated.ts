@@ -46,6 +46,21 @@ export function classifyInbound(mail: InboundHeaders, ourAddresses: readonly str
   return { kind: 'normal' };
 }
 
+/**
+ * Whether an unknown sender becomes a contact (owner O-5: the contact list builds up as tickets
+ * come in). Only real people outside the company: never our own domain (colleagues, our
+ * mailboxes), never automated mail (no-reply, newsletters, auto-replies, bounces, loops).
+ */
+export function shouldCreateContact(from: string, inbound: InboundClass, ourAddresses: readonly string[]): boolean {
+  if (inbound.kind !== 'normal') return false;
+  const address = normaliseMailAddress(from);
+  const at = address.lastIndexOf('@');
+  if (at < 1 || at === address.length - 1 || address === 'unknown@unknown') return false;
+  const domain = address.slice(at + 1);
+  const ours = new Set(ourAddresses.map((a) => normaliseMailAddress(a).split('@')[1]).filter(Boolean));
+  return !ours.has(domain);
+}
+
 /** An auto-response goes out only for normal mail, when enabled (and, if set, only for new tickets). */
 export function shouldAutoRespond(args: {
   enabled: boolean;

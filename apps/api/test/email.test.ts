@@ -80,9 +80,42 @@ describe('email channel (spec 11)', () => {
       const r = await receive(ctx.app, mailbox, { from: 'Sam <SAM@acme.example>', subject: 'Panels', text: 'Hi' });
       const t = (await agent.get(`/api/tickets/${tid(r)}`)).body;
       expect(t.contactCard.name).toBe('Sam Smith');
-      // Contacts in databases not linked to the mailbox are not matched.
+      // Contacts in databases not linked to the mailbox are not matched: a new contact is made in
+      // the mailbox's own database instead (owner O-5).
       const pat = await receive(ctx.app, mailbox, { from: 'pat@globex.example', subject: 'Partner' });
-      expect((await admin.get(`/api/tickets/${tid(pat)}`)).body.contactId).toBeNull();
+      const contactId = (await admin.get(`/api/tickets/${tid(pat)}`)).body.contactId as string;
+      const made = (await admin.get(`/api/crm/contacts/${contactId}`)).body;
+      expect(made.databaseId).toBe(ctx.ids.crm.customersDb);
+    });
+
+    it('someone new writing in becomes a contact, once; colleagues and automated mail never do (owner O-5)', async () => {
+      const first = await receive(ctx.app, mailbox, {
+        from: 'Priya Sharma <Priya.Sharma@newcustomer.example>',
+        subject: 'Lighting for our new office',
+      });
+      const ticket = (await admin.get(`/api/tickets/${tid(first)}`)).body;
+      expect(ticket.contactCard.name).toBe('Priya Sharma');
+      const contact = (await admin.get(`/api/crm/contacts/${ticket.contactId}`)).body;
+      expect(contact.emails).toEqual(['priya.sharma@newcustomer.example']);
+      expect(contact.databaseId).toBe(ctx.ids.crm.customersDb);
+      const history = (await admin.get(`/api/crm/contacts/${ticket.contactId}/history`)).body as { action: string }[];
+      expect(history.map((h) => h.action)).toContain('create');
+
+      // Her next email is matched to the same contact, not a duplicate.
+      const second = await receive(ctx.app, mailbox, {
+        from: 'priya.sharma@newcustomer.example',
+        subject: 'Another question',
+      });
+      expect((await admin.get(`/api/tickets/${tid(second)}`)).body.contactId).toBe(ticket.contactId);
+      const search = await admin.get('/api/crm/contacts?q=newcustomer.example');
+      expect(search.body.total).toBe(1);
+
+      // A colleague on our own domain, and no-reply mail, get a ticket but no contact.
+      const colleague = await receive(ctx.app, mailbox, { from: 'colleague@relaydesk.local', subject: 'Internal' });
+      expect((await admin.get(`/api/tickets/${tid(colleague)}`)).body.contactId).toBeNull();
+      const robot = await receive(ctx.app, mailbox, { from: 'noreply@shop.example', subject: 'Your receipt' });
+      expect((await admin.get(`/api/tickets/${tid(robot)}`)).body.contactId).toBeNull();
+      expect((await admin.get('/api/crm/contacts?q=shop.example')).body.total).toBe(0);
     });
 
     it('a customer email reopens a Waiting ticket; HTML is sanitised; attachments are stored and downloadable', async () => {

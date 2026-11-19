@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { baseSubject, parseReferences, replyRecipients, replySubject, ticketIdFromSubject } from './email/addresses.js';
-import { classifyInbound, shouldAutoRespond } from './email/automated.js';
+import { classifyInbound, shouldAutoRespond, shouldCreateContact } from './email/automated.js';
 import { decideThread, pickContact } from './email/threading.js';
 import {
   applyRoutingRules,
@@ -277,5 +277,34 @@ describe('templates (spec 11.5)', () => {
   });
   it('signatures keep their line breaks', () => {
     expect(signatureHtml('Kind regards,\nRyan & co')).toBe('<p>Kind regards,<br>Ryan &amp; co</p>');
+  });
+});
+
+describe('contacts from incoming email (owner O-5)', () => {
+  const ours = ['support@ricoman.com', 'rdolan@ricoman.com'];
+  const normal = { kind: 'normal' } as const;
+
+  it('a customer writing in for the first time becomes a contact', () => {
+    expect(shouldCreateContact('Dana@Customer.example', normal, ours)).toBe(true);
+  });
+
+  it('colleagues on our own domain never become contacts, even from an unconnected inbox', () => {
+    expect(shouldCreateContact('ttam@ricoman.com', normal, ours)).toBe(false);
+    expect(shouldCreateContact('Someone@RICOMAN.com', normal, ours)).toBe(false);
+  });
+
+  it('automated mail never becomes a contact: no-reply, newsletters, auto-replies, bounces, loops', () => {
+    for (const inbound of [
+      { kind: 'automated', reason: 'no-reply sender' },
+      { kind: 'automated', reason: 'mailing list' },
+      { kind: 'bounce' },
+      { kind: 'loop' },
+    ] as const)
+      expect(shouldCreateContact('news@shop.example', inbound, ours)).toBe(false);
+  });
+
+  it('a sender whose address could not be read is not turned into a contact', () => {
+    expect(shouldCreateContact('unknown@unknown', normal, ours)).toBe(false);
+    expect(shouldCreateContact('not-an-address', normal, ours)).toBe(false);
   });
 });

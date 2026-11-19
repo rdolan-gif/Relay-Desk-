@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, isNull, or } from 'drizzle-orm';
 import { fullAccessProfile } from '@relay-desk/domain';
 import { PasswordService } from '../auth/password.service';
 import { SlaService } from '../sla/sla.service';
@@ -30,6 +30,7 @@ import {
   rightsProfileCrmDatabases,
   rightsProfileTicketViews,
   rightsProfiles,
+  routingRules,
   sidebarItems,
   ticketFollowers,
   ticketStatuses,
@@ -287,6 +288,21 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   }
   // Enquiry type from the subject/body (owner O-11). No automatic filtering (owner O-12).
   await seedRoutingRules(db, { enquiryType, includeNoReply: false });
+  // Ricoman customers often send a PO as "… Ricoman Order" with no PO number (owner O-30).
+  // Added after the other rules (later wins), and only if missing, so it also reaches a live server.
+  const orderRule = orderSubjectRule(enquiryType);
+  const [hasOrderRule] = await db
+    .select({ id: routingRules.id })
+    .from(routingRules)
+    .where(eq(routingRules.title, orderRule.title));
+  if (!hasOrderRule) {
+    const [last] = await db
+      .select({ position: routingRules.position })
+      .from(routingRules)
+      .orderBy(desc(routingRules.position))
+      .limit(1);
+    await db.insert(routingRules).values({ ...orderRule, position: (last?.position ?? -1) + 1 });
+  }
   // Starter knowledge-base folders (spec 15): the team can read and write in all three.
   const kbIds = await seedKb(db, {
     Products: [],
@@ -327,6 +343,31 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   if (opts.demo) await demoData(db, rp, cat, views, opts.password ?? DEFAULT_SEED_PASSWORD, enquiryType);
   const linked = await linkPersonViews(db, views, cat, boxes);
   return { categories: cat, views, rightsProfiles: rp, mailboxes: boxes, linkedPersonViews: linked };
+}
+
+/**
+ * "Order" in the subject marks a purchase order (2-working-hour reply target), unless the
+ * subject reads like a chase or a query about an existing order. Editable afterwards in
+ * Settings › Email routing.
+ */
+export function orderSubjectRule(enquiryTypeFieldId: string) {
+  return {
+    title: 'Orders in the subject',
+    description:
+      'A subject mentioning an order is treated as a purchase order, unless it is chasing or querying one (where, status, delivery, missing, cancel, return…).',
+    allConditions: [
+      { field: 'subject' as const, op: 'regex' as const, value: '\\borders?\\b' },
+      {
+        field: 'subject' as const,
+        op: 'regex' as const,
+        value:
+          '\\b(where|status|update|chas\\w*|track\\w*|deliver\\w*|dispatch\\w*|missing|late|delay\\w*|when|cancel\\w*|amend\\w*|chang\\w*|query|queries|problem|issue|wrong|damaged|return\\w*|refund\\w*|invoice\\w*|credit)\\b',
+        negate: true,
+      },
+    ],
+    anyConditions: [],
+    actions: { customFields: { [enquiryTypeFieldId]: 'purchase_order' } },
+  };
 }
 
 /**

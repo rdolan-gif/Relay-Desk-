@@ -20,6 +20,8 @@
 | Personal inboxes assign new mail to their owner; it shows only in their "… Tickets" view (O-25)                                                                               | `apps/api/test/email.test.ts`, `apps/api/test/owner-requests.test.ts`                  |
 | Google sign-in for one Workspace domain: existing active staff only; login CSRF, replay, wrong domain and wrong app refused; emergency admin password needs two-factor (O-26) | `apps/api/test/google-signin.test.ts`                                                  |
 | First install on an empty database with no demo data; refuses on an installed database; demo seed refused in production (O-27)                                                | `apps/api/test/install.test.ts`                                                        |
+| New senders become contacts automatically; not our own domain or automated mail; matched (not duplicated) next time (O-5, O-30)                                               | `packages/domain/src/email.test.ts`, `apps/api/test/email.test.ts`                     |
+| "Order" in the subject marks a purchase order unless it is a chase or query (O-30)                                                                                            | `apps/api/test/order-rule.test.ts`, `apps/api/test/owner-requests.test.ts`             |
 | Demo: views and filters apply to the recorded tickets with the server's matching rules                                                                                        | checked by hand in the demo build                                                      |
 
 ## Phase 7 — Reporting and knowledge base ✅ (portal deferred, owner S-8)

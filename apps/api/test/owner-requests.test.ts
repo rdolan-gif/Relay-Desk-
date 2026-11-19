@@ -57,6 +57,15 @@ describe('owner requests', () => {
     } finally {
       await pool.end();
     }
+    // The "order" rule (O-30) is added once, after the other routing rules.
+    const pool2 = createPool(TEST_DATABASE_URL);
+    const rules = await pool2.query<{ title: string; position: number }>(
+      'select title, position from routing_rules where deleted_at is null order by position',
+    );
+    await pool2.end();
+    expect(rules.rows.filter((x) => x.title === 'Orders in the subject')).toHaveLength(1);
+    expect(rules.rows.at(-1)!.title).toBe('Orders in the subject');
+
     const ryan = await loginAs(ctx.app, 'ryan@relaydesk.local');
     const richard = await loginAs(ctx.app, 'richard@relaydesk.local');
     const thierry = await loginAs(ctx.app, 'thierry@relaydesk.local');
