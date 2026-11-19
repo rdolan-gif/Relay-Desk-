@@ -718,6 +718,10 @@ export const mailboxQueues = pgTable(
       .references(() => categories.id),
     /** New tickets from this mailbox are assigned to this person (e.g. a personal inbox). */
     defaultUserId: uuid('default_user_id').references(() => users.id, { onDelete: 'set null' }),
+    /** Closing a ticket archives its Gmail conversation in this inbox (owner O-31). */
+    archiveOnClose: boolean('archive_on_close').notNull().default(true),
+    /** Space-separated Google permissions granted at the last "Connect Gmail". */
+    grantedScopes: text('granted_scopes'),
     headerThreading: boolean('header_threading').notNull().default(true),
     active: boolean('active').notNull().default(true),
     /** Staff notification emails are sent from this mailbox (spec 13). */
@@ -784,6 +788,8 @@ export const emailMessages = pgTable(
     queueId: uuid('queue_id').references(() => mailboxQueues.id),
     providerMessageId: text('provider_message_id'),
     providerThreadId: text('provider_thread_id'),
+    /** When this conversation was archived in Gmail because its ticket closed (owner O-31). */
+    inboxArchivedAt: timestamp('inbox_archived_at', { withTimezone: true }),
     messageId: text('message_id'),
     inReplyTo: text('in_reply_to'),
     references: text('references')

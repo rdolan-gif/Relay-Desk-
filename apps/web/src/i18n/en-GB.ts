@@ -378,6 +378,10 @@ export const t = {
     senderName: 'Sender name',
     defaultCategory: 'New tickets go to',
     defaultUser: 'Assign new tickets to',
+    archiveOnClose: 'Archive in Gmail when a ticket is closed',
+    archiveOnCloseHelp:
+      'Closing (or deleting) a ticket archives its email conversation in this Gmail inbox. A customer reply brings it back to the inbox and reopens the ticket.',
+    reconnectToArchive: 'Reconnect Gmail to let Relay Desk archive closed conversations.',
     defaultUserHelp: 'For a personal inbox: its new tickets go straight to this person. Leave empty to share them out.',
     noDefaultUser: 'Nobody (shared inbox)',
     headerThreading: 'Match replies by email headers',

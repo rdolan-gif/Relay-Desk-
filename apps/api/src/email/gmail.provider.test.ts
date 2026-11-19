@@ -21,6 +21,7 @@ function fakeGoogle() {
     if (u.includes('/messages/m1?format=raw') || u.includes('/messages/m2?format=raw'))
       return json({ id: u.includes('m1') ? 'm1' : 'm2', threadId: 't1', raw });
     if (u.endsWith('/messages/send')) return json({ id: 's1', threadId: 't1' });
+    if (u.endsWith('/threads/t1/modify')) return json({ id: 't1' });
     if (u.includes('/messages/s1?format=metadata'))
       return json({ payload: { headers: [{ name: 'Message-ID', value: '<gmail-id@mail.gmail.com>' }] } });
     return json({ error: 'not found' }, 404);
@@ -70,5 +71,14 @@ describe('Gmail API provider (owner O-2)', () => {
   it('a mailbox without a refresh token is reported as not connected', async () => {
     const p = new GmailProvider(() => ({ clientId: 'id', clientSecret: 'secret' }), fakeGoogle().http);
     await expect(p.fetchNew({ ...box(null), credentials: null })).rejects.toThrow(/not connected/);
+  });
+
+  it('archiving takes a whole conversation out of the inbox, and a conversation already deleted in Gmail is skipped', async () => {
+    const { http, calls } = fakeGoogle();
+    const p = new GmailProvider(() => ({ clientId: 'c', clientSecret: 's' }), http);
+    await p.archiveThreads(box('100'), ['t1', 'gone']);
+    const modify = calls.filter((c) => c.url.includes('/threads/'));
+    expect(modify.map((c) => c.url.split('/users/me')[1])).toEqual(['/threads/t1/modify', '/threads/gone/modify']);
+    expect(JSON.parse(String(modify[0]!.init!.body))).toEqual({ removeLabelIds: ['INBOX'] });
   });
 });

@@ -57,6 +57,7 @@ import {
 } from './email/email.controller';
 import { GmailProvider } from './email/gmail.provider';
 import { GoogleOAuthService } from './email/google-oauth.service';
+import { InboxArchiveService } from './email/inbox-archive.service';
 import { InboundService } from './email/inbound.service';
 import { MailJobsService } from './email/mail-jobs.service';
 import { MailboxesService } from './email/mailboxes.service';
@@ -188,6 +189,7 @@ export class AppModule {
         TicketJobsService,
         StorageService,
         GoogleOAuthService,
+        InboxArchiveService,
         MailboxesService,
         RoutingRulesService,
         TemplatesService,

@@ -83,6 +83,22 @@ export class GmailProvider implements MailProvider {
     return { providerId: sent.id, threadId: sent.threadId, messageId };
   }
 
+  async archiveThreads(box: MailboxRef, threadIds: string[]): Promise<void> {
+    const token = await this.accessToken(box);
+    for (const id of threadIds) {
+      try {
+        await this.json(`${API}/threads/${encodeURIComponent(id)}/modify`, token, {
+          method: 'POST',
+          body: JSON.stringify({ removeLabelIds: ['INBOX'] }),
+        });
+      } catch (err) {
+        // Already deleted in Gmail: nothing left to archive.
+        if (err instanceof GmailError && err.status === 404) continue;
+        throw err;
+      }
+    }
+  }
+
   private async accessToken(box: MailboxRef): Promise<string> {
     const cached = this.tokens.get(box.id);
     if (cached && cached.expires > Date.now() + 60_000) return cached.token;

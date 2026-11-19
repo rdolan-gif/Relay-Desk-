@@ -29,6 +29,8 @@ export interface SendResult {
 export interface MailProvider {
   fetchNew(box: MailboxRef): Promise<FetchResult>;
   send(box: MailboxRef, raw: Buffer, opts: { threadId?: string }): Promise<SendResult>;
+  /** Archives whole conversations: takes them out of the inbox, like Gmail's Archive button. */
+  archiveThreads(box: MailboxRef, threadIds: string[]): Promise<void>;
 }
 
 export const MAIL_PROVIDERS = Symbol('MAIL_PROVIDERS');
@@ -41,6 +43,9 @@ export type MailProviders = Record<MailboxRef['provider'], MailProvider>;
 export class FakeMailProvider implements MailProvider {
   private inbox = new Map<string, FetchedMessage[]>();
   readonly sent = new Map<string, Buffer[]>();
+  /** Conversations archived per mailbox address. */
+  readonly archived = new Map<string, string[]>();
+  failNextArchive: string | null = null;
   private counter = 0;
   failNextSend: string | null = null;
 
@@ -68,8 +73,19 @@ export class FakeMailProvider implements MailProvider {
     return { providerId: `fake-sent-${++this.counter}` };
   }
 
+  async archiveThreads(box: MailboxRef, threadIds: string[]): Promise<void> {
+    if (this.failNextArchive) {
+      const msg = this.failNextArchive;
+      this.failNextArchive = null;
+      throw new Error(msg);
+    }
+    this.archived.set(box.address, [...(this.archived.get(box.address) ?? []), ...threadIds]);
+  }
+
   reset() {
     this.inbox.clear();
     this.sent.clear();
+    this.archived.clear();
+    this.failNextArchive = null;
   }
 }
