@@ -46,6 +46,8 @@ GOOGLE_CLIENT_ID=<from step 1>
 GOOGLE_CLIENT_SECRET=<from step 1>
 GOOGLE_SIGNIN_DOMAIN=ricoman.com
 PASSWORD_SIGNIN=administrators
+# Only if port 8080 is already taken on the server:
+# WEB_PORT=3014
 ```
 
 **Put `ENCRYPTION_KEY` and `POSTGRES_PASSWORD` in the password manager.** `ENCRYPTION_KEY`

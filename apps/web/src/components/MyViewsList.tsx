@@ -26,6 +26,8 @@ interface ViewInfo {
   name: string;
 }
 
+/** Longer than dnd-kit's 50 ms post-drop click guard. */
+const CLICK_GUARD_MS = 100;
 const REVEAL = 56; // px the row slides to show the bin
 const THRESHOLD = 32; // px of swipe needed to keep it open
 
@@ -217,7 +219,10 @@ export function MyViewsList(props: {
     const to = order.findIndex((i) => i.viewId === e.over!.id);
     setOrder(arrayMove(order, from, to));
     setRevealed(null);
-    setPendingOrder(true);
+    // dnd-kit swallows every click for 50 ms after a drop (so the drop itself isn't a click).
+    // Opening "Save changes?" straight away let a quick first click on Save vanish, so it
+    // opens just after that window instead.
+    window.setTimeout(() => setPendingOrder(true), CLICK_GUARD_MS);
   };
   const deletingView = deleting ? props.views.get(deleting.viewId) : undefined;
   const own = deleting ? props.ownViewIds.has(deleting.viewId) : false;
