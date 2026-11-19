@@ -1,7 +1,7 @@
 # Live server (support.ricoman.com). Settings come from .env next to this file; see
 # docs/setup/go-live.md. Run: docker compose -f docker-compose.prod.yml up -d --build
 #
-# The web app listens on 127.0.0.1:8080 only; put the server's HTTPS proxy (nginx, Caddy…)
+# The web app listens on 127.0.0.1:8080 only (or WEB_PORT); put the server's HTTPS proxy (nginx, Caddy…)
 # in front of it for support.ricoman.com. The database is not reachable from outside.
 name: relay-desk
 
@@ -34,7 +34,8 @@ services:
   web:
     build: { context: ., dockerfile: apps/web/Dockerfile }
     restart: unless-stopped
-    ports: ['127.0.0.1:8080:80']
+    # WEB_PORT in .env if 8080 is taken on the server (e.g. 3014).
+    ports: ['127.0.0.1:${WEB_PORT:-8080}:80']
     depends_on: [api]
 
 volumes:
