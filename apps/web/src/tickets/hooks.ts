@@ -16,4 +16,5 @@ export const STATE_COLOURS: Record<string, string> = {
   closed: 'gray',
   archived: 'dark',
 };
-export const PRIORITY_COLOURS: Record<string, string> = { low: 'gray', normal: 'blue', high: 'red' };
+/** Traffic light (owner O-33). */
+export const PRIORITY_COLOURS: Record<string, string> = { low: 'green', normal: 'amber', high: 'red' };

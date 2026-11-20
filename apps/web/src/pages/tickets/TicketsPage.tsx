@@ -29,7 +29,8 @@ import { useCrmMeta, useUserDirectory } from '../../crm/hooks';
 import { formatDateTime } from '../../format';
 import { t } from '../../i18n/en-GB';
 import { notifyError, notifyOk } from '../../notify';
-import { PRIORITY_COLOURS, STATE_COLOURS, useTicketMeta } from '../../tickets/hooks';
+import { STATE_COLOURS, useTicketMeta } from '../../tickets/hooks';
+import { PriorityBadge } from '../../tickets/Priority';
 import type { Sidebar, Ticket } from '../../tickets/types';
 import { rememberTicketList } from '../../tickets/lastList';
 
@@ -143,11 +144,7 @@ export function TicketsPage() {
       key: 'priority',
       label: t.tickets.priority,
       sortKey: 'priority',
-      render: (r) => (
-        <Badge color={PRIORITY_COLOURS[r.priority]} variant="dot" style={{ minWidth: 'max-content' }}>
-          {t.tickets.priorities[r.priority]}
-        </Badge>
-      ),
+      render: (r) => <PriorityBadge priority={r.priority} />,
     },
     { key: 'userName', label: t.tickets.user, render: (r) => r.userName ?? t.crm.none },
     {

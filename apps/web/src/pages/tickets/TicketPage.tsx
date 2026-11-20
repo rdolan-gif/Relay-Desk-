@@ -55,7 +55,8 @@ import { useFieldErrors } from '../../crm/useEntityForm';
 import { formatDateTime } from '../../format';
 import { t } from '../../i18n/en-GB';
 import { notifyError, notifyOk } from '../../notify';
-import { PRIORITY_COLOURS, STATE_COLOURS, useTicketMeta } from '../../tickets/hooks';
+import { STATE_COLOURS, useTicketMeta } from '../../tickets/hooks';
+import { PriorityBadge, PriorityDot } from '../../tickets/Priority';
 import type { Activity, TicketDetail } from '../../tickets/types';
 import { lastTicketList } from '../../tickets/lastList';
 
@@ -426,6 +427,13 @@ export function TicketPage() {
       value={shown.priority}
       disabled={readOnly}
       allowDeselect={false}
+      leftSection={<PriorityDot priority={shown.priority} />}
+      renderOption={({ option }) => (
+        <Group gap="xs" wrap="nowrap">
+          <PriorityDot priority={option.value} />
+          {option.label}
+        </Group>
+      )}
       onChange={(v) => v && set({ priority: v as Priority })}
     />
   );
@@ -669,11 +677,7 @@ export function TicketPage() {
                     {t.tickets.states[tk.state]}
                   </Badge>
                 )}
-                {tk && (
-                  <Badge color={PRIORITY_COLOURS[tk.priority]} variant="dot">
-                    {t.tickets.priorities[tk.priority]}
-                  </Badge>
-                )}
+                {tk && <PriorityBadge priority={tk.priority} />}
                 {tk?.sla?.indicator && <SlaIcon sla={tk.sla} deadline={tk.deadline} closedAt={tk.closedAt} />}
                 {tk && <PresenceAvatars ticketId={tk.id} editing={dirty || hasComment || !!compose} />}
               </>
