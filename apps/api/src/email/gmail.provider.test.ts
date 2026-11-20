@@ -81,4 +81,24 @@ describe('Gmail API provider (owner O-2)', () => {
     expect(modify.map((c) => c.url.split('/users/me')[1])).toEqual(['/threads/t1/modify', '/threads/gone/modify']);
     expect(JSON.parse(String(modify[0]!.init!.body))).toEqual({ removeLabelIds: ['INBOX'] });
   });
+
+  it('an email deleted forever in Gmail before it was read is skipped; the rest still import', async () => {
+    const { http } = fakeGoogle();
+    const gone = (async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('/history?'))
+        return new Response(
+          JSON.stringify({
+            historyId: '106',
+            history: [{ messagesAdded: [{ message: { id: 'gone' } }, { message: { id: 'm1' } }] }],
+          }),
+          { status: 200 },
+        );
+      return http(url, init);
+    }) as typeof fetch;
+    const p = new GmailProvider(() => ({ clientId: 'c', clientSecret: 's' }), gone);
+    const res = await p.fetchNew(box('100'));
+    expect(res.messages.map((m) => m.providerId)).toEqual(['m1']);
+    expect(res.cursor).toBe('106');
+  });
 });

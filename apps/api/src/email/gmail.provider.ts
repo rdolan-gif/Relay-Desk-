@@ -59,10 +59,15 @@ export class GmailProvider implements MailProvider {
     }
     const messages = [];
     for (const id of ids) {
-      const m = await this.json<{ id: string; threadId: string; raw: string }>(
-        `${API}/messages/${id}?format=raw`,
-        token,
-      );
+      let m: { id: string; threadId: string; raw: string };
+      try {
+        m = await this.json<{ id: string; threadId: string; raw: string }>(`${API}/messages/${id}?format=raw`, token);
+      } catch (err) {
+        // Deleted forever in Gmail before we read it: nothing to import. Skipping it (rather than
+        // failing the batch) stops one vanished email from blocking every email after it.
+        if (err instanceof GmailError && err.status === 404) continue;
+        throw err;
+      }
       messages.push({ providerId: m.id, threadId: m.threadId, raw: Buffer.from(m.raw, 'base64url') });
     }
     return { messages, cursor };
