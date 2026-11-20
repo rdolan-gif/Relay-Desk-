@@ -24,6 +24,8 @@ export function DateTimeField(props: Common & { value: string | null; onChange: 
       valueFormat="DD/MM/YYYY HH:mm"
       placeholder="DD/MM/YYYY HH:mm"
       clearable
+      // One line even in a narrow column (e.g. the ticket's top strip).
+      styles={{ input: { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }}
       value={isoToLocal(props.value)}
       onChange={(v) => props.onChange(localToIso(v))}
     />

@@ -24,6 +24,7 @@
 | "Order" in the subject marks a purchase order unless it is a chase or query (O-30)                                                                                                      | `apps/api/test/order-rule.test.ts`, `apps/api/test/owner-requests.test.ts`             |
 | Closing or deleting a ticket archives its Gmail conversation once; open/waiting/shared ones stay; per-inbox switch and permission; retried on failure; reconnect keeps its place (O-31) | `apps/api/test/inbox-archive.test.ts`, `apps/api/src/email/gmail.provider.test.ts`     |
 | Working views show Open and Waiting only; "Closed & archived" view for everyone; search by contact name, email or company (O-31)                                                        | `apps/api/test/owner-requests.test.ts`                                                 |
+| Ticket fields in a strip across the top by default; More details for the rest; side layouts kept (O-32)                                                                                 | `e2e/tests/owner-requests.spec.ts`                                                     |
 | Demo: views and filters apply to the recorded tickets with the server's matching rules                                                                                                  | checked by hand in the demo build                                                      |
 
 ## Phase 7 — Reporting and knowledge base ✅ (portal deferred, owner S-8)

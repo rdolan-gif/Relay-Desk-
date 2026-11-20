@@ -183,3 +183,25 @@ test('a reply can be sent and the ticket closed in one click', async ({ page }) 
   await page.goto(ticketUrl);
   await expect(page.getByText('Closed', { exact: true }).first()).toBeVisible();
 });
+
+test('ticket fields sit in a strip across the top by default; More details shows the rest; the side layout is still there', async ({
+  page,
+}) => {
+  await login(page, 'agent@relaydesk.local');
+  await page.goto('/tickets');
+  await page.getByRole('row').nth(1).click();
+  const state = page.getByRole('textbox', { name: 'State' });
+  const activities = page.getByRole('tab', { name: 'Activities' });
+  await expect(state).toBeVisible();
+  // The strip is above the activities and the side "Form" tab is gone.
+  expect((await state.boundingBox())!.y).toBeLessThan((await activities.boundingBox())!.y);
+  await expect(page.getByRole('tab', { name: 'Form' })).toHaveCount(0);
+  await expect(page.getByLabel('Title')).toBeHidden();
+  await page.getByRole('button', { name: /More details/ }).click();
+  await expect(page.getByLabel('Title')).toBeVisible();
+
+  await page.getByRole('radio', { name: '2:1' }).click();
+  await expect(page.getByRole('tab', { name: 'Form' })).toBeVisible();
+  await page.getByRole('radio', { name: 'Top' }).click();
+  await expect(page.getByRole('tab', { name: 'Form' })).toHaveCount(0);
+});

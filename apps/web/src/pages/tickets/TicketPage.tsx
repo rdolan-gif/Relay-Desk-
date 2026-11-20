@@ -6,7 +6,9 @@ import {
   Button,
   Checkbox,
   CopyButton,
+  Collapse,
   Grid,
+  SimpleGrid,
   Group,
   Menu,
   Modal,
@@ -130,11 +132,12 @@ export function TicketPage() {
   const [viewAt, setViewAt] = useState<string | null>(null);
   const [layout, setLayout] = useState(() => {
     try {
-      return localStorage.getItem(LAYOUT_KEY) ?? '1:1';
+      return localStorage.getItem(LAYOUT_KEY) ?? 'top';
     } catch {
-      return '1:1';
+      return 'top';
     }
   });
+  const [moreOpen, setMoreOpen] = useState(false);
   const [compose, setCompose] = useState<{ mode: ComposeMode; source: Activity | null; templateId?: string } | null>(
     null,
   );
@@ -386,107 +389,120 @@ export function TicketPage() {
         ? t.tickets.addComment
         : t.tickets.saveChanges;
 
-  const form = (
-    <Stack gap="sm">
-      <TextInput
-        label={t.tickets.titleField}
-        required
-        value={shown.title}
-        disabled={readOnly}
-        onChange={(e) => set({ title: e.currentTarget.value })}
-        error={fieldErrors.errors.title}
-      />
-      {can('crm_contacts', 'read') && (
-        <ContactPicker
-          label={t.tickets.contact}
-          value={shown.contactId}
-          disabled={readOnly}
-          onChange={(v) => set({ contactId: v })}
-        />
-      )}
-      {tk?.contactCard && <ContactCard card={tk.contactCard} />}
-      <Select
-        label={t.tickets.category}
-        data={groupCategories(meta.data.categories)}
-        value={shown.categoryId}
-        disabled={readOnly}
-        allowDeselect={false}
-        onChange={(v) => v && set({ categoryId: v })}
-      />
-      <Group grow>
-        <Select
-          label={t.tickets.priority}
-          data={Object.entries(t.tickets.priorities).map(([value, label]) => ({ value, label }))}
-          value={shown.priority}
-          disabled={readOnly}
-          allowDeselect={false}
-          onChange={(v) => v && set({ priority: v as Priority })}
-        />
-        <Select
-          label={t.tickets.state}
-          data={Object.entries(t.tickets.states).map(([value, label]) => ({ value, label }))}
-          value={shown.state}
-          disabled={readOnly}
-          allowDeselect={false}
-          onChange={(v) => v && set({ state: v as TicketState })}
-        />
-      </Group>
-      <UserPicker
-        label={t.tickets.user}
-        value={shown.userId}
-        disabled={readOnly}
-        onChange={(v) => set({ userId: v })}
-        error={fieldErrors.errors.userId}
-      />
-      <Group grow>
-        <DateTimeField
-          label={t.tickets.deadline}
-          value={shown.deadline}
-          disabled={readOnly}
-          onChange={(deadline) => set({ deadline })}
-        />
-        <DateTimeField
-          label={t.tickets.reopenAt}
-          value={shown.reopenAt}
-          disabled={readOnly}
-          required={shown.state === 'waiting' && category?.waitingRequiresReopen}
-          error={fieldErrors.errors.reopenAt}
-          onChange={(reopenAt) => set({ reopenAt })}
-        />
-      </Group>
-      <MultiSelect
-        label={t.tickets.followers}
-        data={(users.data ?? []).map((u) => ({ value: u.id, label: u.name }))}
-        value={shown.followerIds}
-        disabled={readOnly}
-        searchable
-        onChange={(v) => set({ followerIds: v })}
-      />
-      {category?.multipleStatuses ? (
-        <MultiSelect
-          label={t.tickets.status}
-          data={statusOptions}
-          value={shown.statusIds}
-          disabled={readOnly}
-          onChange={(v) => set({ statusIds: v })}
-          error={fieldErrors.errors.statusIds}
-        />
-      ) : (
-        <Select
-          label={t.tickets.status}
-          data={statusOptions}
-          value={shown.statusIds[0] ?? null}
-          disabled={readOnly}
-          clearable
-          error={fieldErrors.errors.statusIds}
-          onChange={(v) => set({ statusIds: v ? [v] : [] })}
-        />
-      )}
-      {fieldErrors.errors.children && (
-        <Alert color="red" p="xs">
-          {fieldErrors.errors.children}
-        </Alert>
-      )}
+  // The form's fields, arranged either beside the activities or as a strip across the top.
+  const titleField = (
+    <TextInput
+      label={t.tickets.titleField}
+      required
+      value={shown.title}
+      disabled={readOnly}
+      onChange={(e) => set({ title: e.currentTarget.value })}
+      error={fieldErrors.errors.title}
+    />
+  );
+  const contactField = can('crm_contacts', 'read') && (
+    <ContactPicker
+      label={t.tickets.contact}
+      value={shown.contactId}
+      disabled={readOnly}
+      onChange={(v) => set({ contactId: v })}
+    />
+  );
+  const contactCardEl = tk?.contactCard && <ContactCard card={tk.contactCard} />;
+  const categoryField = (
+    <Select
+      label={t.tickets.category}
+      data={groupCategories(meta.data.categories)}
+      value={shown.categoryId}
+      disabled={readOnly}
+      allowDeselect={false}
+      onChange={(v) => v && set({ categoryId: v })}
+    />
+  );
+  const priorityField = (
+    <Select
+      label={t.tickets.priority}
+      data={Object.entries(t.tickets.priorities).map(([value, label]) => ({ value, label }))}
+      value={shown.priority}
+      disabled={readOnly}
+      allowDeselect={false}
+      onChange={(v) => v && set({ priority: v as Priority })}
+    />
+  );
+  const stateField = (
+    <Select
+      label={t.tickets.state}
+      data={Object.entries(t.tickets.states).map(([value, label]) => ({ value, label }))}
+      value={shown.state}
+      disabled={readOnly}
+      allowDeselect={false}
+      onChange={(v) => v && set({ state: v as TicketState })}
+    />
+  );
+  const userField = (
+    <UserPicker
+      label={t.tickets.user}
+      value={shown.userId}
+      disabled={readOnly}
+      onChange={(v) => set({ userId: v })}
+      error={fieldErrors.errors.userId}
+    />
+  );
+  const deadlineField = (
+    <DateTimeField
+      label={t.tickets.deadline}
+      value={shown.deadline}
+      disabled={readOnly}
+      onChange={(deadline) => set({ deadline })}
+    />
+  );
+  const reopenField = (
+    <DateTimeField
+      label={t.tickets.reopenAt}
+      value={shown.reopenAt}
+      disabled={readOnly}
+      required={shown.state === 'waiting' && category?.waitingRequiresReopen}
+      error={fieldErrors.errors.reopenAt}
+      onChange={(reopenAt) => set({ reopenAt })}
+    />
+  );
+  const followersField = (
+    <MultiSelect
+      label={t.tickets.followers}
+      data={(users.data ?? []).map((u) => ({ value: u.id, label: u.name }))}
+      value={shown.followerIds}
+      disabled={readOnly}
+      searchable
+      onChange={(v) => set({ followerIds: v })}
+    />
+  );
+  const statusField = category?.multipleStatuses ? (
+    <MultiSelect
+      label={t.tickets.status}
+      data={statusOptions}
+      value={shown.statusIds}
+      disabled={readOnly}
+      onChange={(v) => set({ statusIds: v })}
+      error={fieldErrors.errors.statusIds}
+    />
+  ) : (
+    <Select
+      label={t.tickets.status}
+      data={statusOptions}
+      value={shown.statusIds[0] ?? null}
+      disabled={readOnly}
+      clearable
+      error={fieldErrors.errors.statusIds}
+      onChange={(v) => set({ statusIds: v ? [v] : [] })}
+    />
+  );
+  const childrenAlert = fieldErrors.errors.children && (
+    <Alert color="red" p="xs">
+      {fieldErrors.errors.children}
+    </Alert>
+  );
+  const descriptionField = (
+    <>
       <Text size="sm" fw={500}>
         {t.tickets.description}
       </Text>
@@ -503,17 +519,93 @@ export function TicketPage() {
           onChange={(description) => set({ description })}
         />
       )}
-      {category && (
-        <DynamicForm
-          layout={category.formLayout}
-          fields={crm.data.customFields}
-          values={shown.customFields}
-          readOnly={readOnly}
-          errors={fieldErrors.errors}
-          onChange={(customFields) => set({ customFields })}
-        />
-      )}
+    </>
+  );
+  const customFieldsEl = category && (
+    <DynamicForm
+      layout={category.formLayout}
+      fields={crm.data.customFields}
+      values={shown.customFields}
+      readOnly={readOnly}
+      errors={fieldErrors.errors}
+      onChange={(customFields) => set({ customFields })}
+    />
+  );
+
+  const form = (
+    <Stack gap="sm">
+      {titleField}
+      {contactField}
+      {contactCardEl}
+      {categoryField}
+      <Group grow>
+        {priorityField}
+        {stateField}
+      </Group>
+      {userField}
+      <Group grow>
+        {deadlineField}
+        {reopenField}
+      </Group>
+      {followersField}
+      {statusField}
+      {childrenAlert}
+      {descriptionField}
+      {customFieldsEl}
     </Stack>
+  );
+
+  // "Top" layout: the everyday fields in a strip above full-width activities; the rest under
+  // "More details", which opens by itself when one of its fields needs attention.
+  const isTop = layout === 'top';
+  const stripErrors = ['userId', 'reopenAt', 'statusIds', 'children'];
+  const moreNeedsAttention = Object.keys(fieldErrors.errors).some((k) => !stripErrors.includes(k));
+  const moreShown = moreOpen || moreNeedsAttention;
+  const topForm = (
+    <Paper withBorder p="sm">
+      <SimpleGrid cols={{ base: 1, xs: 2, md: 4, xl: 8 }} spacing="sm" verticalSpacing="xs">
+        {contactField}
+        {categoryField}
+        {priorityField}
+        {stateField}
+        {userField}
+        {deadlineField}
+        {reopenField}
+        {statusField}
+      </SimpleGrid>
+      {childrenAlert}
+      <Anchor
+        component="button"
+        type="button"
+        size="sm"
+        mt="xs"
+        aria-expanded={moreShown}
+        onClick={() => setMoreOpen(!moreShown)}
+      >
+        {moreShown ? t.tickets.lessDetails : t.tickets.moreDetails}
+      </Anchor>
+      <Collapse in={moreShown}>
+        <Stack gap="sm" mt="sm">
+          {titleField}
+          {contactCardEl}
+          {followersField}
+          {descriptionField}
+          {customFieldsEl}
+          {tk && tk.children.length > 0 && (
+            <Stack gap={4}>
+              <Text size="sm" fw={600}>
+                {t.tickets.children}
+              </Text>
+              {tk.children.map((c) => (
+                <Anchor key={c.id} component={Link} to={`/tickets/${c.id}`} size="sm">
+                  #{c.id} {c.title} ({t.tickets.states[c.state]})
+                </Anchor>
+              ))}
+            </Stack>
+          )}
+        </Stack>
+      </Collapse>
+    </Paper>
   );
 
   return (
@@ -617,7 +709,10 @@ export function TicketPage() {
             <>
               <Segmented
                 label={t.tickets.layout}
-                data={['2:1', '1:1', '1:2'].map((v) => ({ value: v, label: v }))}
+                data={['top', '2:1', '1:1', '1:2'].map((v) => ({
+                  value: v,
+                  label: v === 'top' ? t.tickets.layoutTop : v,
+                }))}
                 value={layout}
                 onChange={(v) => {
                   setLayout(v);
@@ -801,7 +896,8 @@ export function TicketPage() {
         </Paper>
       ) : (
         <Grid>
-          <Grid.Col span={{ base: 12, md: left }}>
+          {isTop && <Grid.Col span={12}>{topForm}</Grid.Col>}
+          <Grid.Col span={{ base: 12, md: isTop ? 12 : left }}>
             <Tabs defaultValue="activities" keepMounted={false}>
               <Tabs.List>
                 <Tabs.Tab value="activities">{t.tickets.activities}</Tabs.Tab>
@@ -972,28 +1068,30 @@ export function TicketPage() {
               </Tabs.Panel>
             </Tabs>
           </Grid.Col>
-          <Grid.Col span={{ base: 12, md: right }}>
-            <Tabs defaultValue="form">
-              <Tabs.List>
-                <Tabs.Tab value="form">{t.tickets.form}</Tabs.Tab>
-              </Tabs.List>
-              <Tabs.Panel value="form" pt="md">
-                {form}
-                {tk && tk.children.length > 0 && (
-                  <Stack gap={4} mt="md">
-                    <Text size="sm" fw={600}>
-                      {t.tickets.children}
-                    </Text>
-                    {tk.children.map((c) => (
-                      <Anchor key={c.id} component={Link} to={`/tickets/${c.id}`} size="sm">
-                        #{c.id} {c.title} ({t.tickets.states[c.state]})
-                      </Anchor>
-                    ))}
-                  </Stack>
-                )}
-              </Tabs.Panel>
-            </Tabs>
-          </Grid.Col>
+          {!isTop && (
+            <Grid.Col span={{ base: 12, md: right }}>
+              <Tabs defaultValue="form">
+                <Tabs.List>
+                  <Tabs.Tab value="form">{t.tickets.form}</Tabs.Tab>
+                </Tabs.List>
+                <Tabs.Panel value="form" pt="md">
+                  {form}
+                  {tk && tk.children.length > 0 && (
+                    <Stack gap={4} mt="md">
+                      <Text size="sm" fw={600}>
+                        {t.tickets.children}
+                      </Text>
+                      {tk.children.map((c) => (
+                        <Anchor key={c.id} component={Link} to={`/tickets/${c.id}`} size="sm">
+                          #{c.id} {c.title} ({t.tickets.states[c.state]})
+                        </Anchor>
+                      ))}
+                    </Stack>
+                  )}
+                </Tabs.Panel>
+              </Tabs>
+            </Grid.Col>
+          )}
         </Grid>
       )}
 
