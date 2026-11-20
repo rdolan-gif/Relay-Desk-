@@ -36,6 +36,8 @@ interface Mailbox {
   defaultCategoryTitle: string;
   defaultUserId: string | null;
   headerThreading: boolean;
+  archiveOnClose: boolean;
+  canArchive: boolean;
   active: boolean;
   autoResponseEnabled: boolean;
   autoResponseNewOnly: boolean;
@@ -48,7 +50,10 @@ interface Mailbox {
   lastSyncAt: string | null;
   lastError: string | null;
 }
-type Draft = Omit<Mailbox, 'id' | 'connected' | 'connectedAs' | 'lastSyncAt' | 'lastError' | 'defaultCategoryTitle'> & {
+type Draft = Omit<
+  Mailbox,
+  'id' | 'connected' | 'connectedAs' | 'lastSyncAt' | 'lastError' | 'defaultCategoryTitle' | 'canArchive'
+> & {
   id?: string;
 };
 const EMPTY = (categoryId: string): Draft => ({
@@ -59,6 +64,7 @@ const EMPTY = (categoryId: string): Draft => ({
   defaultCategoryId: categoryId,
   defaultUserId: null,
   headerThreading: true,
+  archiveOnClose: true,
   active: true,
   autoResponseEnabled: false,
   autoResponseNewOnly: true,
@@ -206,6 +212,11 @@ export function MailboxesPage() {
                       {m.lastError}
                     </Text>
                   )}
+                  {m.provider === 'gmail' && m.connected && m.archiveOnClose && !m.canArchive && (
+                    <Text size="xs" c="amber.8">
+                      {t.mailboxes.reconnectToArchive}
+                    </Text>
+                  )}
                 </Stack>
               </Table.Td>
               <Table.Td>
@@ -286,6 +297,12 @@ export function MailboxesPage() {
               label={t.mailboxes.active}
               checked={draft.active}
               onChange={(e) => setDraft({ ...draft, active: e.currentTarget.checked })}
+            />
+            <Checkbox
+              label={t.mailboxes.archiveOnClose}
+              description={t.mailboxes.archiveOnCloseHelp}
+              checked={draft.archiveOnClose}
+              onChange={(e) => setDraft({ ...draft, archiveOnClose: e.currentTarget.checked })}
             />
             <Checkbox
               label={t.mailboxes.headerThreading}

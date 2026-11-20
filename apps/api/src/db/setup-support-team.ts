@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, isNull, or } from 'drizzle-orm';
 import { fullAccessProfile } from '@relay-desk/domain';
 import { PasswordService } from '../auth/password.service';
 import { SlaService } from '../sla/sla.service';
@@ -30,6 +30,7 @@ import {
   rightsProfileCrmDatabases,
   rightsProfileTicketViews,
   rightsProfiles,
+  routingRules,
   sidebarItems,
   ticketFollowers,
   ticketStatuses,
@@ -151,26 +152,30 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
     if (attached.length) await new SlaService(db).refreshCategory(id);
   }
 
+  // Working views list Open and Waiting tickets only, like a Gmail inbox: a closed ticket
+  // leaves the view (owner O-31) and is found in "Closed & archived", All tickets or search.
   const view = async (name: string, categoryId: string) => {
+    const conditions = [
+      { field: 'categoryId', op: 'is' as const, value: categoryId },
+      { field: 'state', op: 'is_not' as const, value: 'closed' },
+      { field: 'state', op: 'is_not' as const, value: 'archived' },
+    ];
     const [row] = await db
       .select()
       .from(ticketViews)
       .where(and(eq(ticketViews.name, name), isNull(ticketViews.ownerUserId), isNull(ticketViews.deletedAt)));
-    return (
-      row?.id ??
-      (
-        await db
-          .insert(ticketViews)
-          .values({
-            name,
-            conditions: [
-              { field: 'categoryId', op: 'is', value: categoryId },
-              { field: 'state', op: 'is_not', value: 'archived' },
-            ],
-          })
-          .returning()
-      )[0]!.id
-    );
+    if (row) {
+      // Views made by an earlier setup showed closed tickets too; update them unless someone
+      // has since changed the view.
+      const earlier = [
+        { field: 'categoryId', op: 'is', value: categoryId },
+        { field: 'state', op: 'is_not', value: 'archived' },
+      ];
+      if (sameConditions(row.conditions, earlier))
+        await db.update(ticketViews).set({ conditions }).where(eq(ticketViews.id, row.id));
+      return row.id;
+    }
+    return (await db.insert(ticketViews).values({ name, conditions }).returning())[0]!.id;
   };
   const views: Record<string, string> = {};
   for (const t of [...SHARED, ...LABELS, ...Object.values(PERSONAL)]) views[t] = await view(t, cat[t]!);
@@ -255,6 +260,29 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
       .values({ rightsProfileId: profileId, viewId: unassigned })
       .onConflictDoNothing();
 
+  // "Closed & archived" (owner O-31): everything that has left the working views, for everyone.
+  // Each person still only sees tickets in categories they have access to.
+  const closedConditions = [
+    { field: 'state', op: 'is_not' as const, value: 'open' },
+    { field: 'state', op: 'is_not' as const, value: 'waiting' },
+  ];
+  const [closedRow] = await db
+    .select()
+    .from(ticketViews)
+    .where(
+      and(eq(ticketViews.name, 'Closed & archived'), isNull(ticketViews.ownerUserId), isNull(ticketViews.deletedAt)),
+    );
+  const closedView =
+    closedRow?.id ??
+    (await db.insert(ticketViews).values({ name: 'Closed & archived', conditions: closedConditions }).returning())[0]!
+      .id;
+  views['Closed & archived'] = closedView;
+  for (const profileId of Object.values(rp))
+    await db
+      .insert(rightsProfileTicketViews)
+      .values({ rightsProfileId: profileId, viewId: closedView })
+      .onConflictDoNothing();
+
   // The four Gmail inboxes (owner O-1, O-10). Addresses can be corrected in Settings > Mailboxes;
   // each is connected with "Connect Gmail" once Google sign-in is set up.
   const mailbox = async (title: string, address: string, categoryTitle: string, senderName: string) => {
@@ -287,6 +315,21 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   }
   // Enquiry type from the subject/body (owner O-11). No automatic filtering (owner O-12).
   await seedRoutingRules(db, { enquiryType, includeNoReply: false });
+  // Ricoman customers often send a PO as "… Ricoman Order" with no PO number (owner O-30).
+  // Added after the other rules (later wins), and only if missing, so it also reaches a live server.
+  const orderRule = orderSubjectRule(enquiryType);
+  const [hasOrderRule] = await db
+    .select({ id: routingRules.id })
+    .from(routingRules)
+    .where(eq(routingRules.title, orderRule.title));
+  if (!hasOrderRule) {
+    const [last] = await db
+      .select({ position: routingRules.position })
+      .from(routingRules)
+      .orderBy(desc(routingRules.position))
+      .limit(1);
+    await db.insert(routingRules).values({ ...orderRule, position: (last?.position ?? -1) + 1 });
+  }
   // Starter knowledge-base folders (spec 15): the team can read and write in all three.
   const kbIds = await seedKb(db, {
     Products: [],
@@ -329,6 +372,37 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   return { categories: cat, views, rightsProfiles: rp, mailboxes: boxes, linkedPersonViews: linked };
 }
 
+/** Same filter conditions, whatever order the database stored each one's keys in. */
+function sameConditions(a: readonly { field: string; op: string; value?: unknown }[], b: typeof a): boolean {
+  const key = (c: (typeof a)[number]) => `${c.field}|${c.op}|${JSON.stringify(c.value ?? null)}`;
+  return a.length === b.length && a.every((c, i) => key(c) === key(b[i]!));
+}
+
+/**
+ * "Order" in the subject marks a purchase order (2-working-hour reply target), unless the
+ * subject reads like a chase or a query about an existing order. Editable afterwards in
+ * Settings › Email routing.
+ */
+export function orderSubjectRule(enquiryTypeFieldId: string) {
+  return {
+    title: 'Orders in the subject',
+    description:
+      'A subject mentioning an order is treated as a purchase order, unless it is chasing or querying one (where, status, delivery, missing, cancel, return…).',
+    allConditions: [
+      { field: 'subject' as const, op: 'regex' as const, value: '\\borders?\\b' },
+      {
+        field: 'subject' as const,
+        op: 'regex' as const,
+        value:
+          '\\b(where|status|update|chas\\w*|track\\w*|deliver\\w*|dispatch\\w*|missing|late|delay\\w*|when|cancel\\w*|amend\\w*|chang\\w*|query|queries|problem|issue|wrong|damaged|return\\w*|refund\\w*|invoice\\w*|credit)\\b',
+        negate: true,
+      },
+    ],
+    anyConditions: [],
+    actions: { customFields: { [enquiryTypeFieldId]: 'purchase_order' } },
+  };
+}
+
 /**
  * The Heather / Thierry / Ryan / Richard views show the tickets assigned to that person
  * (owner O-24), not the old Gmail-label category of the same name. Each view is linked to the
@@ -363,6 +437,7 @@ async function linkPersonViews(
       .set({
         conditions: [
           { field: 'userId', op: 'is', value: person.id },
+          { field: 'state', op: 'is_not', value: 'closed' },
           { field: 'state', op: 'is_not', value: 'archived' },
           // Personal-inbox tickets show only in that person's "… Tickets" view (O-25).
           ...Object.values(PERSONAL).map((t) => ({ field: 'categoryId', op: 'is_not' as const, value: cat[t]! })),

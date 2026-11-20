@@ -5,7 +5,12 @@ import { CONFIG, type AppConfig } from '../config/config';
 export const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.send',
+  // Archive a conversation when its ticket closes (owner O-31). Never deletes mail.
+  'https://www.googleapis.com/auth/gmail.modify',
 ];
+
+/** The permission archiving needs; inboxes connected before it was asked for must reconnect. */
+export const GMAIL_MODIFY_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
 
 /**
  * Google sign-in for connecting a Gmail mailbox (owner O-2, O-10). With Ricoman's
@@ -60,7 +65,10 @@ export class GoogleOAuthService {
   }
 
   /** Exchanges the code for tokens and reads which Gmail address was connected. */
-  async exchange(code: string, http: typeof fetch = fetch): Promise<{ refreshToken: string; email: string }> {
+  async exchange(
+    code: string,
+    http: typeof fetch = fetch,
+  ): Promise<{ refreshToken: string; email: string; scopes: string }> {
     const res = await http('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -75,6 +83,7 @@ export class GoogleOAuthService {
     const tokens = (await res.json().catch(() => ({}))) as {
       access_token?: string;
       refresh_token?: string;
+      scope?: string;
       error?: string;
     };
     if (!res.ok || !tokens.access_token || !tokens.refresh_token) {
@@ -89,7 +98,7 @@ export class GoogleOAuthService {
     const p = (await profile.json()) as { emailAddress?: string };
     if (!p.emailAddress)
       throw new BadRequestException({ message: 'Could not read the Gmail address.', reason: 'google_refused' });
-    return { refreshToken: tokens.refresh_token, email: p.emailAddress.toLowerCase() };
+    return { refreshToken: tokens.refresh_token, email: p.emailAddress.toLowerCase(), scopes: tokens.scope ?? '' };
   }
 
   private sign(data: object): string {

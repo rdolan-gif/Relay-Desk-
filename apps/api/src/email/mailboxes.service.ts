@@ -7,6 +7,7 @@ import { isUniqueViolation } from '../common/db-errors';
 import type { AuthContext } from '../common/request-context';
 import { DB, type Db } from '../db/db';
 import { categories, crmDatabases, mailboxQueueCrmDatabases, mailboxQueues, users } from '../db/schema';
+import { GMAIL_MODIFY_SCOPE } from './google-oauth.service';
 import type { MailboxRef } from './providers';
 
 export interface MailboxInput {
@@ -16,6 +17,7 @@ export interface MailboxInput {
   provider: 'gmail' | 'fake';
   defaultCategoryId: string;
   defaultUserId?: string | null;
+  archiveOnClose?: boolean;
   headerThreading: boolean;
   active: boolean;
   autoResponseEnabled: boolean;
@@ -177,7 +179,7 @@ export class MailboxesService {
   }
 
   /** Stores the Google refresh token (encrypted) after sign-in. The Gmail address must match the mailbox. */
-  async connect(queueId: string, userId: string, email: string, refreshToken: string) {
+  async connect(queueId: string, userId: string, email: string, refreshToken: string, scopes = '') {
     const box = await this.find(queueId);
     if (normaliseMailAddress(email) !== box.address) {
       throw new ForbiddenException({
@@ -191,7 +193,10 @@ export class MailboxesService {
         .set({
           credentialsEnc: this.secrets.encrypt(JSON.stringify({ refreshToken })),
           connectedAs: email,
-          syncCursor: null,
+          grantedScopes: scopes || null,
+          // Reconnecting the same account (e.g. to grant archiving) carries on where it left off,
+          // so no email that arrived in between is skipped; a different account starts afresh.
+          syncCursor: box.connectedAs === email ? box.syncCursor : null,
           lastError: null,
           updatedAt: new Date(),
         })
@@ -308,6 +313,9 @@ export function publicMailbox(r: MailboxRow, crmDatabaseIds: string[], defaultCa
     defaultCategoryId: r.defaultCategoryId,
     defaultCategoryTitle: defaultCategoryTitle ?? '',
     defaultUserId: r.defaultUserId,
+    archiveOnClose: r.archiveOnClose,
+    // Archiving in Gmail needs the "modify" permission, granted at the last Connect Gmail.
+    canArchive: (r.grantedScopes ?? '').split(/\s+/).includes(GMAIL_MODIFY_SCOPE),
     headerThreading: r.headerThreading,
     active: r.active,
     autoResponseEnabled: r.autoResponseEnabled,

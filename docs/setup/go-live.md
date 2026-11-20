@@ -135,7 +135,7 @@ git pull
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Database changes are applied automatically when the API starts. After adding people in
+Database changes are applied automatically when the API starts. If an update adds a Gmail permission (Settings › Mailboxes then says "Reconnect Gmail…"), click **Reconnect** for each inbox and sign in as it again; it carries on where it left off. After adding people in
 Settings › Users, re-run the setup to link their views and personal inbox (it only adds what is
 missing):
 

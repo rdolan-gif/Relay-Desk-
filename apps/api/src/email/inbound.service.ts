@@ -9,9 +9,11 @@ import {
   cleanMessageId,
   decideThread,
   parseReferences,
+  diffFields,
   pickContact,
   renderTemplate,
   shouldAutoRespond,
+  shouldCreateContact,
   ticketIdFromSubject,
   type RoutingRule,
   type ThreadCandidate,
@@ -22,11 +24,14 @@ import {
   activities,
   attachments,
   contacts,
+  crmDatabases,
   emailMessages,
   inboundLog,
   mailboxQueues,
   tickets,
 } from '../db/schema';
+import { contactFlat } from '../crm/contacts.service';
+import { HistoryService } from '../history/history.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { StorageService } from '../storage/storage.service';
 import { TicketsService } from '../tickets/tickets.service';
@@ -86,6 +91,7 @@ export class InboundService {
     @Inject(TemplatesService) private readonly templates: TemplatesService,
     @Inject(OutboundService) private readonly outbound: OutboundService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(HistoryService) private readonly history: HistoryService,
   ) {}
 
   /** Checks every active, connected mailbox once. */
@@ -155,7 +161,8 @@ export class InboundService {
     const stored = await this.storage.put(`mail/${box.id}/in`, m.raw, 'eml');
     const from = flatten(parsed.from)[0] ?? { address: 'unknown@unknown' };
     const headers = Object.fromEntries([...parsed.headers.keys()].map((k) => [k.toLowerCase(), headerText(parsed, k)]));
-    const cls = classifyInbound({ from: from.address, headers }, await this.mailboxes.allAddresses());
+    const ourAddresses = await this.mailboxes.allAddresses();
+    const cls = classifyInbound({ from: from.address, headers }, ourAddresses);
 
     if (cls.kind === 'loop') {
       await this.logOutcome(this.db, box.id, m.providerId, 'dropped_loop', null, null, `from ${from.address}`);
@@ -202,7 +209,7 @@ export class InboundService {
             ),
           )
       : [];
-    const { contact } = pickContact(matches);
+    let { contact } = pickContact(matches);
     const html = parsed.html ? sanitizeEmailHtml(parsed.html) : textToHtml(parsed.text ?? '');
     const to = flatten(parsed.to);
     const cc = flatten(parsed.cc);
@@ -213,6 +220,10 @@ export class InboundService {
       if (decision.action === 'append') {
         ticketId = decision.ticketId;
       } else {
+        // Someone new writing in becomes a contact (owner O-5), so the list builds up by itself.
+        if (!contact && dbIds.length && shouldCreateContact(from.address, cls, ourAddresses)) {
+          contact = await this.createContact(tx, dbIds, from);
+        }
         const [account] = contact?.accountId
           ? await tx.select().from(accounts).where(eq(accounts.id, contact.accountId))
           : [];
@@ -380,6 +391,29 @@ export class InboundService {
       cur = t.mergedIntoId;
     }
     return null;
+  }
+
+  /** A contact for a new sender, in the mailbox's default CRM database (or its first one). */
+  private async createContact(tx: DbOrTx, dbIds: string[], from: { name?: string; address: string }) {
+    const [database] = await tx
+      .select({ id: crmDatabases.id })
+      .from(crmDatabases)
+      .where(and(inArray(crmDatabases.id, dbIds), isNull(crmDatabases.deletedAt)))
+      .orderBy(desc(crmDatabases.isDefault))
+      .limit(1);
+    if (!database) return null;
+    // No custom values are set, so there is nothing for applyCustomInput to check.
+    const [row] = await tx
+      .insert(contacts)
+      .values({
+        databaseId: database.id,
+        name: from.name?.trim() || from.address,
+        emails: [from.address],
+        phones: [],
+      })
+      .returning();
+    await this.history.record(tx, null, 'contact', row!.id, 'create', diffFields({}, contactFlat(row!)));
+    return row!;
   }
 
   private async logOutcome(

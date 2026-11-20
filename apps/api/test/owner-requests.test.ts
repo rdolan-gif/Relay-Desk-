@@ -57,6 +57,15 @@ describe('owner requests', () => {
     } finally {
       await pool.end();
     }
+    // The "order" rule (O-30) is added once, after the other routing rules.
+    const pool2 = createPool(TEST_DATABASE_URL);
+    const rules = await pool2.query<{ title: string; position: number }>(
+      'select title, position from routing_rules where deleted_at is null order by position',
+    );
+    await pool2.end();
+    expect(rules.rows.filter((x) => x.title === 'Orders in the subject')).toHaveLength(1);
+    expect(rules.rows.at(-1)!.title).toBe('Orders in the subject');
+
     const ryan = await loginAs(ctx.app, 'ryan@relaydesk.local');
     const richard = await loginAs(ctx.app, 'richard@relaydesk.local');
     const thierry = await loginAs(ctx.app, 'thierry@relaydesk.local');
@@ -118,5 +127,73 @@ describe('owner requests', () => {
       ((await ryan.get(`/api/tickets?viewId=${viewId}&pageSize=200`)).body.items as { id: number }[]).map((t) => t.id);
     expect(await ids(setup!.views.Ryan!)).not.toContain(own);
     expect(await ids(setup!.views["Ryan's Tickets"]!)).toContain(own);
+  });
+
+  it('working views show Open and Waiting only; closed tickets move to "Closed & archived" (O-31)', async () => {
+    const pool = createPool(TEST_DATABASE_URL);
+    let setup: Awaited<ReturnType<typeof setupSupportTeam>>;
+    try {
+      setup = await setupSupportTeam(createDb(pool), { demo: true });
+      // A view made by an earlier setup (closed tickets included) is brought up to date on a
+      // re-run; one somebody changed by hand is left alone.
+      await pool.query('update ticket_views set conditions = $1 where id = $2', [
+        JSON.stringify([
+          { field: 'categoryId', op: 'is', value: setup.categories.Enquiries },
+          { field: 'state', op: 'is_not', value: 'archived' },
+        ]),
+        setup.views.Enquiries,
+      ]);
+      const custom = [{ field: 'categoryId', op: 'is', value: setup.categories['Accounts & Returns'] }];
+      await pool.query('update ticket_views set conditions = $1 where id = $2', [
+        JSON.stringify(custom),
+        setup.views['Accounts & Returns'],
+      ]);
+      await setupSupportTeam(createDb(pool), { demo: true });
+      const rows = (
+        await pool.query<{ id: string; conditions: { value?: string }[] }>(
+          'select id, conditions from ticket_views where id = any($1)',
+          [[setup.views.Enquiries, setup.views['Accounts & Returns']]],
+        )
+      ).rows;
+      expect(rows.find((r) => r.id === setup.views.Enquiries)!.conditions.map((c) => c.value)).toContain('closed');
+      expect(rows.find((r) => r.id === setup.views['Accounts & Returns'])!.conditions).toEqual(custom);
+    } finally {
+      await pool.end();
+    }
+
+    const thierry = await loginAs(ctx.app, 'thierry@relaydesk.local');
+    const ryan = await loginAs(ctx.app, 'ryan@relaydesk.local');
+    const id = (await ryan.post('/api/tickets', { title: 'Closing soon', categoryId: setup!.categories.Enquiries! }))
+      .body.id as number;
+    const inView = async (c: Client, viewId: string) =>
+      ((await c.get(`/api/tickets?viewId=${viewId}&pageSize=200`)).body.items as { id: number }[]).map((t) => t.id);
+    expect(await inView(thierry, setup!.views.Enquiries!)).toContain(id);
+    expect((await ryan.patch(`/api/tickets/${id}`, { state: 'closed' })).status).toBe(200);
+    expect(await inView(thierry, setup!.views.Enquiries!)).not.toContain(id);
+    // Everyone has "Closed & archived", and it holds the closed ticket.
+    const names = ((await thierry.get('/api/tickets/views')).body.teamViews as { name: string }[]).map((v) => v.name);
+    expect(names).toContain('Closed & archived');
+    expect(await inView(thierry, setup!.views['Closed & archived']!)).toContain(id);
+  });
+
+  it('search finds a closed ticket by the customer: contact name, email address or company (O-31)', async () => {
+    const sam = ((await admin.get('/api/crm/contacts?q=Sam')).body.items as { id: string; name: string }[])[0]!;
+    const id = (
+      await admin.post('/api/tickets', {
+        title: 'Panels for the new site',
+        categoryId: ctx.ids.helpdesk.categories.support,
+        contactId: sam.id,
+      })
+    ).body.id as number;
+    await admin.patch(`/api/tickets/${id}`, { state: 'closed', statusIds: [ctx.ids.helpdesk.statuses.resolved] });
+    const found = async (q: string) =>
+      ((await admin.get(`/api/tickets?q=${encodeURIComponent(q)}&pageSize=200`)).body.items as { id: number }[]).map(
+        (t) => t.id,
+      );
+    expect(await found('Sam Smith')).toContain(id);
+    expect(await found('sam@acme')).toContain(id);
+    expect(await found('Acme Supplies')).toContain(id);
+    const global = (await admin.get('/api/search?q=Acme%20Supplies')).body.tickets as { id: number; state: string }[];
+    expect(global.find((t) => t.id === id)?.state).toBe('closed');
   });
 });

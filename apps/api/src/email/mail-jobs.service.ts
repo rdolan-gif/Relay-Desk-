@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import { CONFIG, type AppConfig } from '../config/config';
 import { InboundService } from './inbound.service';
+import { InboxArchiveService } from './inbox-archive.service';
 
 /** Checks every connected mailbox every MAIL_POLL_SECONDS (spec 11.1: 60 s default). Off in tests. */
 @Injectable()
@@ -11,6 +12,7 @@ export class MailJobsService implements OnModuleInit, OnApplicationShutdown {
 
   constructor(
     @Inject(InboundService) private readonly inbound: InboundService,
+    @Inject(InboxArchiveService) private readonly archive: InboxArchiveService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -28,6 +30,12 @@ export class MailJobsService implements OnModuleInit, OnApplicationShutdown {
     this.running = true;
     try {
       await this.inbound.syncAll();
+    } catch (err) {
+      this.log.error(err);
+    }
+    try {
+      // Closed tickets: archive their conversations in Gmail (owner O-31).
+      await this.archive.archivePending();
     } catch (err) {
       this.log.error(err);
     } finally {

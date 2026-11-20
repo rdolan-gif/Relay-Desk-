@@ -21,8 +21,14 @@ This is a one-off job for whoever administers Ricoman's Google Workspace (about 
 4. Scopes (**Data access**): add
    - `https://www.googleapis.com/auth/gmail.readonly` (read new mail)
    - `https://www.googleapis.com/auth/gmail.send` (send replies)
+   - `https://www.googleapis.com/auth/gmail.modify` (archive a conversation when its ticket
+     is closed)
 
-   Relay Desk never deletes, labels or moves mail in Gmail; the inbox stays as it is.
+   Relay Desk never deletes mail or changes labels in Gmail. The only change it makes is to
+   **archive** a conversation (take it out of the inbox) once its ticket is closed or deleted,
+   like the team used to do by hand; it can be turned off per inbox in Settings › Mailboxes.
+   Inboxes connected before this permission was added show "Reconnect Gmail to let Relay Desk
+   archive closed conversations": click **Reconnect** and sign in as that inbox again.
 
 ## 3. Create the OAuth client
 

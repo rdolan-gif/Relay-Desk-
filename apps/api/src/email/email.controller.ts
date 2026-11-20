@@ -143,8 +143,8 @@ export class GoogleCallbackController {
     try {
       if (q.error || !q.code || !q.state) return back({ error: q.error ?? 'cancelled' });
       const { queueId, userId } = this.google.verifyState(q.state);
-      const { refreshToken, email } = await this.google.exchange(q.code);
-      await this.mailboxes.connect(queueId, userId, email, refreshToken);
+      const { refreshToken, email, scopes } = await this.google.exchange(q.code);
+      await this.mailboxes.connect(queueId, userId, email, refreshToken, scopes);
       return back({ connected: email });
     } catch (err) {
       const message =

@@ -277,7 +277,12 @@ export class TicketsService {
   /** Title, description, comment text, or the ticket number ("123" or "#123"). */
   searchSql(term: string): SQL {
     const like = likeTerm(term);
-    const parts: SQL[] = [sql`${tickets.title} ilike ${like}`, sql`${tickets.description} ilike ${like}`];
+    const parts: SQL[] = [
+      sql`${tickets.title} ilike ${like}`,
+      sql`${tickets.description} ilike ${like}`,
+      // The customer: contact name, email address or company (owner O-31).
+      sql`exists (select 1 from contacts c left join accounts ac on ac.id = c.account_id where c.id = ${tickets.contactId} and c.deleted_at is null and (c.name ilike ${like} or array_to_string(c.emails, ' ') ilike ${like} or ac.name ilike ${like}))`,
+    ];
     // Full-text over comments and emails (spec 14), using the GIN-indexed search vectors.
     const words = term
       .toLowerCase()
