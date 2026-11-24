@@ -31,6 +31,8 @@ export interface MailProvider {
   send(box: MailboxRef, raw: Buffer, opts: { threadId?: string }): Promise<SendResult>;
   /** Archives whole conversations: takes them out of the inbox, like Gmail's Archive button. */
   archiveThreads(box: MailboxRef, threadIds: string[]): Promise<void>;
+  /** Puts archived conversations back in the inbox (a snoozed ticket's re-open date came). */
+  unarchiveThreads(box: MailboxRef, threadIds: string[]): Promise<void>;
 }
 
 export const MAIL_PROVIDERS = Symbol('MAIL_PROVIDERS');
@@ -45,6 +47,8 @@ export class FakeMailProvider implements MailProvider {
   readonly sent = new Map<string, Buffer[]>();
   /** Conversations archived per mailbox address. */
   readonly archived = new Map<string, string[]>();
+  /** Conversations put back in the inbox per mailbox address. */
+  readonly unarchived = new Map<string, string[]>();
   failNextArchive: string | null = null;
   private counter = 0;
   failNextSend: string | null = null;
@@ -82,10 +86,15 @@ export class FakeMailProvider implements MailProvider {
     this.archived.set(box.address, [...(this.archived.get(box.address) ?? []), ...threadIds]);
   }
 
+  async unarchiveThreads(box: MailboxRef, threadIds: string[]): Promise<void> {
+    this.unarchived.set(box.address, [...(this.unarchived.get(box.address) ?? []), ...threadIds]);
+  }
+
   reset() {
     this.inbox.clear();
     this.sent.clear();
     this.archived.clear();
+    this.unarchived.clear();
     this.failNextArchive = null;
   }
 }

@@ -25,8 +25,9 @@ This is a one-off job for whoever administers Ricoman's Google Workspace (about 
      is closed)
 
    Relay Desk never deletes mail or changes labels in Gmail. The only change it makes is to
-   **archive** a conversation (take it out of the inbox) once its ticket is closed or deleted,
-   like the team used to do by hand; it can be turned off per inbox in Settings › Mailboxes.
+   **archive** a conversation (take it out of the inbox) once its ticket is closed, deleted or
+   waiting (snoozed until its re-open date, when it is put back in the inbox), like the team
+   used to do by hand; it can be turned off per inbox in Settings › Mailboxes.
    Inboxes connected before this permission was added show "Reconnect Gmail to let Relay Desk
    archive closed conversations": click **Reconnect** and sign in as that inbox again.
 
