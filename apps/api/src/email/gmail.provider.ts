@@ -1,4 +1,4 @@
-import type { FetchResult, MailProvider, MailboxRef, SendResult } from './providers';
+import type { FetchOptions, FetchResult, MailProvider, MailboxRef, SendResult } from './providers';
 
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -22,7 +22,7 @@ export class GmailProvider implements MailProvider {
     private readonly http: Fetcher = fetch,
   ) {}
 
-  async fetchNew(box: MailboxRef): Promise<FetchResult> {
+  async fetchNew(box: MailboxRef, opts: FetchOptions = {}): Promise<FetchResult> {
     const token = await this.accessToken(box);
     if (!box.cursor) {
       // First sync: start from now, so connecting doesn't import the whole mailbox.
@@ -57,8 +57,17 @@ export class GmailProvider implements MailProvider {
       ids.push(...(list.messages ?? []).map((m) => m.id));
       cursor = (await this.json<{ historyId: string }>(`${API}/profile`, token)).historyId;
     }
+    // Catching up on a big backlog (2026-11-24: support@ fell behind and every poll tried to download
+    // all of it, ran out of Gmail's per-user-per-minute quota half way, saved nothing and started again
+    // the next minute - for hours). Now: skip emails already imported, download at most `max` per poll,
+    // and if Gmail says "quota" part way, keep what we have. The cursor only moves on once everything
+    // listed has been looked at; until then the next poll lists the same range and carries on.
+    const known = opts.known && ids.length ? await opts.known(ids) : new Set<string>();
+    const todo = ids.filter((id) => !known.has(id));
+    const max = opts.max ?? 100;
+    let more = todo.length > max;
     const messages = [];
-    for (const id of ids) {
+    for (const id of todo.slice(0, max)) {
       let m: { id: string; threadId: string; raw: string };
       try {
         m = await this.json<{ id: string; threadId: string; raw: string }>(`${API}/messages/${id}?format=raw`, token);
@@ -66,11 +75,15 @@ export class GmailProvider implements MailProvider {
         // Deleted forever in Gmail before we read it: nothing to import. Skipping it (rather than
         // failing the batch) stops one vanished email from blocking every email after it.
         if (err instanceof GmailError && err.status === 404) continue;
+        if (err instanceof GmailError && (err.status === 403 || err.status === 429) && messages.length) {
+          more = true;
+          break;
+        }
         throw err;
       }
       messages.push({ providerId: m.id, threadId: m.threadId, raw: Buffer.from(m.raw, 'base64url') });
     }
-    return { messages, cursor };
+    return { messages, cursor: more ? box.cursor : cursor };
   }
 
   async send(box: MailboxRef, raw: Buffer, opts: { threadId?: string }): Promise<SendResult> {

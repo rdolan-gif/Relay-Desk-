@@ -101,4 +101,57 @@ describe('Gmail API provider (owner O-2)', () => {
     expect(res.messages.map((m) => m.providerId)).toEqual(['m1']);
     expect(res.cursor).toBe('106');
   });
+
+  describe('catching up on a backlog', () => {
+    /** History lists `n` emails (b1..bn); each download costs one call, and `quotaAfter` downloads hit Gmail's quota. */
+    function backlog(n: number, quotaAfter = Infinity) {
+      const { http } = fakeGoogle();
+      const raw = Buffer.from('Subject: Hi\r\n\r\nBody').toString('base64url');
+      let gets = 0;
+      const fetcher = (async (url: string | URL, init?: RequestInit) => {
+        const u = String(url);
+        const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+        if (u.includes('/history?'))
+          return json({
+            historyId: '200',
+            history: [{ messagesAdded: Array.from({ length: n }, (_, i) => ({ message: { id: `b${i + 1}` } })) }],
+          });
+        const m = /\/messages\/(b\d+)\?format=raw/.exec(u);
+        if (m) {
+          if (++gets > quotaAfter) return json({ error: { code: 429, message: 'Quota exceeded' } }, 429);
+          return json({ id: m[1], threadId: `t-${m[1]}`, raw });
+        }
+        return http(url, init);
+      }) as typeof fetch;
+      return { p: new GmailProvider(() => ({ clientId: 'c', clientSecret: 's' }), fetcher), gets: () => gets };
+    }
+
+    it('downloads at most `max` per poll and keeps the cursor so the next poll carries on', async () => {
+      const b = backlog(5);
+      const res = await b.p.fetchNew(box('100'), { max: 2 });
+      expect(res.messages.map((m) => m.providerId)).toEqual(['b1', 'b2']);
+      expect(res.cursor).toBe('100');
+      expect(b.gets()).toBe(2);
+    });
+
+    it('skips emails already imported, and moves the cursor on once the rest are in', async () => {
+      const b = backlog(5);
+      const res = await b.p.fetchNew(box('100'), { max: 3, known: async () => new Set(['b1', 'b2']) });
+      expect(res.messages.map((m) => m.providerId)).toEqual(['b3', 'b4', 'b5']);
+      expect(res.cursor).toBe('200');
+      expect(b.gets()).toBe(3);
+    });
+
+    it('running out of quota part way keeps what was downloaded and holds the cursor', async () => {
+      const b = backlog(5, 2);
+      const res = await b.p.fetchNew(box('100'), { max: 10 });
+      expect(res.messages.map((m) => m.providerId)).toEqual(['b1', 'b2']);
+      expect(res.cursor).toBe('100');
+    });
+
+    it('running out of quota before anything downloads is still an error', async () => {
+      const b = backlog(5, 0);
+      await expect(b.p.fetchNew(box('100'))).rejects.toThrow(/429/);
+    });
+  });
 });

@@ -25,9 +25,16 @@ export interface SendResult {
   messageId?: string;
 }
 
+export interface FetchOptions {
+  /** Of these provider ids, the ones already imported (so they aren't downloaded again). */
+  known?: (ids: string[]) => Promise<Set<string>>;
+  /** Most messages to download in one poll; the rest wait for the next poll. */
+  max?: number;
+}
+
 /** One way of reading and sending mail for a mailbox (Gmail API, or a stand-in for tests). */
 export interface MailProvider {
-  fetchNew(box: MailboxRef): Promise<FetchResult>;
+  fetchNew(box: MailboxRef, opts?: FetchOptions): Promise<FetchResult>;
   send(box: MailboxRef, raw: Buffer, opts: { threadId?: string }): Promise<SendResult>;
   /** Archives whole conversations: takes them out of the inbox, like Gmail's Archive button. */
   archiveThreads(box: MailboxRef, threadIds: string[]): Promise<void>;
