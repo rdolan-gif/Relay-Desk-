@@ -120,7 +120,19 @@ export class InboundService {
   private async syncMailboxOnce(queueId: string): Promise<InboundOutcome[]> {
     const box = await this.mailboxes.find(queueId);
     try {
-      const res = await this.providers[box.provider].fetchNew(this.mailboxes.ref(box));
+      const res = await this.providers[box.provider].fetchNew(this.mailboxes.ref(box), {
+        known: async (ids) => {
+          const seen = new Set<string>();
+          for (let i = 0; i < ids.length; i += 500) {
+            const rows = await this.db
+              .select({ id: inboundLog.providerMessageId })
+              .from(inboundLog)
+              .where(and(eq(inboundLog.queueId, box.id), inArray(inboundLog.providerMessageId, ids.slice(i, i + 500))));
+            for (const r of rows) if (r.id) seen.add(r.id);
+          }
+          return seen;
+        },
+      });
       const outcomes: InboundOutcome[] = [];
       for (const m of res.messages) {
         try {
