@@ -129,7 +129,7 @@ describe('owner requests', () => {
     expect(await ids(setup!.views["Ryan's Tickets"]!)).toContain(own);
   });
 
-  it('working views show Open and Waiting only; closed tickets move to "Closed & archived" (O-31)', async () => {
+  it('working views show Open only; closed tickets move to "Closed & archived" and waiting ones to "Waiting (snoozed)" (O-31, O-34)', async () => {
     const pool = createPool(TEST_DATABASE_URL);
     let setup: Awaited<ReturnType<typeof setupSupportTeam>>;
     try {
@@ -143,6 +143,15 @@ describe('owner requests', () => {
         ]),
         setup.views.Enquiries,
       ]);
+      // Last week's version (closed hidden, waiting shown) is upgraded too.
+      await pool.query('update ticket_views set conditions = $1 where id = $2', [
+        JSON.stringify([
+          { field: 'categoryId', op: 'is', value: setup.categories['Resolution Centre'] },
+          { field: 'state', op: 'is_not', value: 'closed' },
+          { field: 'state', op: 'is_not', value: 'archived' },
+        ]),
+        setup.views['Resolution Centre'],
+      ]);
       const custom = [{ field: 'categoryId', op: 'is', value: setup.categories['Accounts & Returns'] }];
       await pool.query('update ticket_views set conditions = $1 where id = $2', [
         JSON.stringify(custom),
@@ -152,10 +161,15 @@ describe('owner requests', () => {
       const rows = (
         await pool.query<{ id: string; conditions: { value?: string }[] }>(
           'select id, conditions from ticket_views where id = any($1)',
-          [[setup.views.Enquiries, setup.views['Accounts & Returns']]],
+          [[setup.views.Enquiries, setup.views['Accounts & Returns'], setup.views['Resolution Centre']]],
         )
       ).rows;
-      expect(rows.find((r) => r.id === setup.views.Enquiries)!.conditions.map((c) => c.value)).toContain('closed');
+      const openOnly = (viewId: string) =>
+        rows
+          .find((r) => r.id === viewId)!
+          .conditions.some((c) => (c as { op?: string }).op === 'is' && c.value === 'open');
+      expect(openOnly(setup.views.Enquiries!)).toBe(true);
+      expect(openOnly(setup.views['Resolution Centre']!)).toBe(true);
       expect(rows.find((r) => r.id === setup.views['Accounts & Returns'])!.conditions).toEqual(custom);
     } finally {
       await pool.end();
@@ -174,6 +188,20 @@ describe('owner requests', () => {
     const names = ((await thierry.get('/api/tickets/views')).body.teamViews as { name: string }[]).map((v) => v.name);
     expect(names).toContain('Closed & archived');
     expect(await inView(thierry, setup!.views['Closed & archived']!)).toContain(id);
+
+    // Waiting = snoozed (O-34): a re-open date is required, and until then the ticket is out of
+    // the working view and in "Waiting (snoozed)".
+    const snoozed = (
+      await ryan.post('/api/tickets', { title: 'Waiting on a reply', categoryId: setup!.categories.Enquiries! })
+    ).body.id as number;
+    expect((await ryan.patch(`/api/tickets/${snoozed}`, { state: 'waiting' })).status).toBe(400);
+    const reopenAt = new Date(Date.now() + 3 * 86_400_000).toISOString();
+    expect((await ryan.patch(`/api/tickets/${snoozed}`, { state: 'waiting', reopenAt })).status).toBe(200);
+    expect(await inView(thierry, setup!.views.Enquiries!)).not.toContain(snoozed);
+    expect(await inView(thierry, setup!.views['Waiting (snoozed)']!)).toContain(snoozed);
+    expect(names).toContain('Closed & archived');
+    const names2 = ((await thierry.get('/api/tickets/views')).body.teamViews as { name: string }[]).map((v) => v.name);
+    expect(names2).toContain('Waiting (snoozed)');
   });
 
   it('search finds a closed ticket by the customer: contact name, email address or company (O-31)', async () => {

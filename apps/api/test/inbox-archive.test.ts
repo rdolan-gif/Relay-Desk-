@@ -3,6 +3,7 @@ import { InboundService } from '../src/email/inbound.service';
 import { InboxArchiveService } from '../src/email/inbox-archive.service';
 import { GMAIL_MODIFY_SCOPE } from '../src/email/google-oauth.service';
 import { MailboxesService } from '../src/email/mailboxes.service';
+import { TicketsService } from '../src/tickets/tickets.service';
 import { FakeMailProvider } from '../src/email/providers';
 import { createPool } from '../src/db/db';
 import { TEST_DATABASE_URL, createTestContext, loginAs, type Client, type TestContext } from './helpers';
@@ -48,17 +49,29 @@ describe('archive in Gmail when a ticket closes', () => {
   const run = () => ctx.app.get(InboxArchiveService).archivePending();
   const archived = () => fake.archived.get(SUPPORT) ?? [];
 
-  it('closing a ticket archives its conversation once; open and waiting tickets stay in the inbox', async () => {
+  it('closing a ticket archives its conversation once; open tickets stay in the inbox', async () => {
     const closed = await receive('t-closed', 'Done with this');
     const open = await receive('t-open', 'Still working');
-    const waiting = await receive('t-waiting', 'Waiting on customer');
-    await admin.patch(`/api/tickets/${waiting}`, { state: 'waiting', reopenAt: new Date(Date.now() + 86_400_000) });
     expect((await close(closed)).status).toBe(200);
 
-    expect(await run()).toEqual({ archived: 1, failed: 0 });
+    expect(await run()).toEqual({ archived: 1, unarchived: 0, failed: 0 });
     expect(archived()).toEqual(['t-closed']);
-    expect(await run()).toEqual({ archived: 0, failed: 0 }); // never twice
+    expect(await run()).toEqual({ archived: 0, unarchived: 0, failed: 0 }); // never twice
     expect(open).toBeGreaterThan(0);
+  });
+
+  it('Waiting snoozes the conversation: archived now, back in the inbox on the re-open date (O-34)', async () => {
+    const id = await receive('t-snooze', 'Waiting on customer');
+    const reopenAt = new Date(Date.now() + 2 * 86_400_000);
+    expect((await admin.patch(`/api/tickets/${id}`, { state: 'waiting', reopenAt })).status).toBe(200);
+    expect(await run()).toEqual({ archived: 1, unarchived: 0, failed: 0 });
+    expect(archived()).toEqual(['t-snooze']);
+
+    // The re-open date comes: the ticket opens and the conversation returns to the inbox.
+    expect(await ctx.app.get(TicketsService).reopenDue(new Date(reopenAt.getTime() + 60_000))).toEqual([id]);
+    expect(await run()).toEqual({ archived: 0, unarchived: 1, failed: 0 });
+    expect(fake.unarchived.get(SUPPORT)).toEqual(['t-snooze']);
+    expect(await run()).toEqual({ archived: 0, unarchived: 0, failed: 0 });
   });
 
   it('a deleted ticket (e.g. spam) is archived too', async () => {
@@ -75,7 +88,8 @@ describe('archive in Gmail when a ticket closes', () => {
     const reply = await receive('t-1', 'Re: Lamp quote', { inReplyTo: 'first@customer.example' });
     expect(reply).toBe(id);
     expect((await admin.get(`/api/tickets/${id}`)).body.state).toBe('open');
-    expect(await run()).toEqual({ archived: 0, failed: 0 }); // open again: left in the inbox
+    // Open again: the conversation goes back to the inbox (Gmail also puts the reply there).
+    expect(await run()).toEqual({ archived: 0, unarchived: 1, failed: 0 });
     await close(id);
     await run();
     expect(archived()).toEqual(['t-1', 't-1']);
@@ -86,7 +100,7 @@ describe('archive in Gmail when a ticket closes', () => {
     const b = await receive('t-shared', 'Different subject, same Gmail conversation');
     expect(b).not.toBe(a);
     await close(a);
-    expect(await run()).toEqual({ archived: 0, failed: 0 });
+    expect(await run()).toEqual({ archived: 0, unarchived: 0, failed: 0 });
     await close(b);
     await run();
     expect(archived()).toEqual(['t-shared']);
@@ -96,12 +110,12 @@ describe('archive in Gmail when a ticket closes', () => {
     const id = await receive('t-x', 'Closed');
     await close(id);
     await sql('update mailbox_queues set archive_on_close = false where id = $1', [mailbox]);
-    expect(await run()).toEqual({ archived: 0, failed: 0 });
+    expect(await run()).toEqual({ archived: 0, unarchived: 0, failed: 0 });
     await sql(
       "update mailbox_queues set archive_on_close = true, granted_scopes = 'https://www.googleapis.com/auth/gmail.send' where id = $1",
       [mailbox],
     );
-    expect(await run()).toEqual({ archived: 0, failed: 0 });
+    expect(await run()).toEqual({ archived: 0, unarchived: 0, failed: 0 });
     const box = (
       (await admin.get('/api/settings/mailboxes')).body.mailboxes as { id: string; canArchive: boolean }[]
     ).find((m) => m.id === mailbox)!;
@@ -112,8 +126,8 @@ describe('archive in Gmail when a ticket closes', () => {
     const id = await receive('t-retry', 'Closed');
     await close(id);
     fake.failNextArchive = 'Gmail is having a moment';
-    expect(await run()).toEqual({ archived: 0, failed: 1 });
-    expect(await run()).toEqual({ archived: 1, failed: 0 });
+    expect(await run()).toEqual({ archived: 0, unarchived: 0, failed: 1 });
+    expect(await run()).toEqual({ archived: 1, unarchived: 0, failed: 0 });
     expect(archived()).toEqual(['t-retry']);
   });
 

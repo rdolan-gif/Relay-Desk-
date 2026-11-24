@@ -102,6 +102,10 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
       if (!row.formLayout.sections.length) {
         await db.update(categories).set({ formLayout: enquiryLayout }).where(eq(categories.id, row.id));
       }
+      // Waiting = snoozed until the re-open date (owner O-34), so a date is required.
+      if (!row.waitingRequiresReopen) {
+        await db.update(categories).set({ waitingRequiresReopen: true }).where(eq(categories.id, row.id));
+      }
       return row.id;
     }
     const [c] = await db
@@ -112,6 +116,7 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
         defaultCrmDatabaseId: customers?.id ?? null,
         autoArchiveDays: 30,
         formLayout: enquiryLayout,
+        waitingRequiresReopen: true,
       })
       .returning();
     await db.insert(categoryStatuses).values(statusIds.map((statusId) => ({ categoryId: c!.id, statusId })));
@@ -155,23 +160,30 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
   // Working views list Open and Waiting tickets only, like a Gmail inbox: a closed ticket
   // leaves the view (owner O-31) and is found in "Closed & archived", All tickets or search.
   const view = async (name: string, categoryId: string) => {
+    // Open only: Waiting tickets are snoozed until their re-open date (owner O-34).
     const conditions = [
       { field: 'categoryId', op: 'is' as const, value: categoryId },
-      { field: 'state', op: 'is_not' as const, value: 'closed' },
-      { field: 'state', op: 'is_not' as const, value: 'archived' },
+      { field: 'state', op: 'is' as const, value: 'open' },
     ];
     const [row] = await db
       .select()
       .from(ticketViews)
       .where(and(eq(ticketViews.name, name), isNull(ticketViews.ownerUserId), isNull(ticketViews.deletedAt)));
     if (row) {
-      // Views made by an earlier setup showed closed tickets too; update them unless someone
-      // has since changed the view.
+      // Views made by an earlier setup showed closed and/or waiting tickets too; update them
+      // unless someone has since changed the view.
       const earlier = [
-        { field: 'categoryId', op: 'is', value: categoryId },
-        { field: 'state', op: 'is_not', value: 'archived' },
+        [
+          { field: 'categoryId', op: 'is', value: categoryId },
+          { field: 'state', op: 'is_not', value: 'archived' },
+        ],
+        [
+          { field: 'categoryId', op: 'is', value: categoryId },
+          { field: 'state', op: 'is_not', value: 'closed' },
+          { field: 'state', op: 'is_not', value: 'archived' },
+        ],
       ];
-      if (sameConditions(row.conditions, earlier))
+      if (earlier.some((e) => sameConditions(row.conditions, e)))
         await db.update(ticketViews).set({ conditions }).where(eq(ticketViews.id, row.id));
       return row.id;
     }
@@ -229,13 +241,12 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
     Heather: await rights('Support – Heather', PERSONAL.Heather!, false),
   };
 
-  // "Unassigned" (owner O-22): open or waiting tickets nobody owns, in the shared and label
-  // categories, so nothing is missed. Personal-inbox tickets are left out (they arrive without
-  // an owner but belong to that person). Only the administrators have it.
+  // "Unassigned" (owner O-22): open tickets nobody owns, in the shared and label categories, so
+  // nothing is missed (snoozed ones show again on their re-open date, O-34). Personal-inbox
+  // tickets are left out (they belong to that person). Only the administrators have it.
   const unassignedConditions = [
     { field: 'userId', op: 'empty' as const },
-    { field: 'state', op: 'is_not' as const, value: 'closed' },
-    { field: 'state', op: 'is_not' as const, value: 'archived' },
+    { field: 'state', op: 'is' as const, value: 'open' },
     ...Object.values(PERSONAL).map((t) => ({ field: 'categoryId', op: 'is_not' as const, value: cat[t]! })),
   ];
   const [unassignedRow] = await db
@@ -281,6 +292,28 @@ export async function setupSupportTeam(db: Db, opts: { demo?: boolean; password?
     await db
       .insert(rightsProfileTicketViews)
       .values({ rightsProfileId: profileId, viewId: closedView })
+      .onConflictDoNothing();
+
+  // "Waiting (snoozed)" (owner O-34): tickets put aside until their re-open date, for everyone.
+  const [waitingRow] = await db
+    .select()
+    .from(ticketViews)
+    .where(
+      and(eq(ticketViews.name, 'Waiting (snoozed)'), isNull(ticketViews.ownerUserId), isNull(ticketViews.deletedAt)),
+    );
+  const waitingView =
+    waitingRow?.id ??
+    (
+      await db
+        .insert(ticketViews)
+        .values({ name: 'Waiting (snoozed)', conditions: [{ field: 'state', op: 'is', value: 'waiting' }] })
+        .returning()
+    )[0]!.id;
+  views['Waiting (snoozed)'] = waitingView;
+  for (const profileId of Object.values(rp))
+    await db
+      .insert(rightsProfileTicketViews)
+      .values({ rightsProfileId: profileId, viewId: waitingView })
       .onConflictDoNothing();
 
   // The four Gmail inboxes (owner O-1, O-10). Addresses can be corrected in Settings > Mailboxes;
@@ -437,8 +470,7 @@ async function linkPersonViews(
       .set({
         conditions: [
           { field: 'userId', op: 'is', value: person.id },
-          { field: 'state', op: 'is_not', value: 'closed' },
-          { field: 'state', op: 'is_not', value: 'archived' },
+          { field: 'state', op: 'is', value: 'open' },
           // Personal-inbox tickets show only in that person's "… Tickets" view (O-25).
           ...Object.values(PERSONAL).map((t) => ({ field: 'categoryId', op: 'is_not' as const, value: cat[t]! })),
         ],

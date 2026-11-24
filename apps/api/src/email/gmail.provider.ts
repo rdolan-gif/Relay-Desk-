@@ -89,12 +89,20 @@ export class GmailProvider implements MailProvider {
   }
 
   async archiveThreads(box: MailboxRef, threadIds: string[]): Promise<void> {
+    await this.modifyThreads(box, threadIds, { removeLabelIds: ['INBOX'] });
+  }
+
+  async unarchiveThreads(box: MailboxRef, threadIds: string[]): Promise<void> {
+    await this.modifyThreads(box, threadIds, { addLabelIds: ['INBOX'] });
+  }
+
+  private async modifyThreads(box: MailboxRef, threadIds: string[], change: object): Promise<void> {
     const token = await this.accessToken(box);
     for (const id of threadIds) {
       try {
         await this.json(`${API}/threads/${encodeURIComponent(id)}/modify`, token, {
           method: 'POST',
-          body: JSON.stringify({ removeLabelIds: ['INBOX'] }),
+          body: JSON.stringify(change),
         });
       } catch (err) {
         // Already deleted in Gmail: nothing left to archive.
