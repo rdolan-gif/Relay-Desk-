@@ -223,6 +223,7 @@ never triggers our auto-response.
 | A reply to an Archived ticket creates a new ticket                                                       | `phase3-acceptance.test.ts`, `email.test.ts` (domain)                          |
 | A no-reply sender routes to _Do not reply_                                                               | `phase3-acceptance.test.ts`                                                    |
 | An auto-reply never triggers our auto-response; "only for new tickets" and on/off respected              | `phase3-acceptance.test.ts`, `email.test.ts` (domain)                          |
+| One failing email is logged and skipped; only an outage makes the mailbox retry the batch               | `apps/api/test/inbound-stuck.test.ts`                                          |
 | Each email is processed once; our own mail is dropped as a loop; bounces mark the sent email Failed      | `apps/api/test/email.test.ts`                                                  |
 | Several header matches: newest ticket wins, others suggested; `[#123]` token fallback; merged → survivor | `email.test.ts` (API and domain)                                               |
 | Sender matched to a contact in the mailbox's CRM databases; customer email reopens Waiting               | `email.test.ts`                                                                |

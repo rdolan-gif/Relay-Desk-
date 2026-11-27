@@ -2,6 +2,8 @@ import type { FetchResult, MailProvider, MailboxRef, SendResult } from './provid
 
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+/** A Gmail call that hangs must not stall the mail check for every inbox. */
+const TIMEOUT_MS = 60_000;
 
 export type Fetcher = typeof fetch;
 
@@ -119,6 +121,7 @@ export class GmailProvider implements MailProvider {
     if (!refreshToken) throw new GmailError(401, 'This mailbox is not connected to Google yet.');
     const { clientId, clientSecret } = this.client();
     const res = await this.http(TOKEN_URL, {
+      signal: AbortSignal.timeout(TIMEOUT_MS),
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -140,6 +143,7 @@ export class GmailProvider implements MailProvider {
 
   private async json<T>(url: string, token: string, init: RequestInit = {}): Promise<T> {
     const res = await this.http(url, {
+      signal: AbortSignal.timeout(TIMEOUT_MS),
       ...init,
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', ...(init.headers ?? {}) },
     });

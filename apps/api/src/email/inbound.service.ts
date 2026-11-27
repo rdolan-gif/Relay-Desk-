@@ -50,15 +50,21 @@ export type InboundOutcome =
   | { outcome: 'appended' | 'created'; ticketId: number; activityId: string; autoResponded: boolean };
 
 /**
- * Errors that come from the email itself (Postgres "data exception" or "integrity" classes,
- * e.g. a byte the database can't store), not from a database or network outage. Such an email
- * is logged as failed and skipped so it can't block every email after it; an outage is rethrown
- * so the whole batch is retried on the next poll.
+ * Errors that mean "try the whole batch again later" rather than "this email is broken": the
+ * database or file storage being unreachable or full (Postgres classes 08 connection, 40
+ * transaction rollback, 53 resources, 57 operator intervention, 58 system error; node network
+ * and disk codes). Any other error while processing one email (a data error, a parsing crash,
+ * a rule that refuses it) is logged as failed and that email skipped, so one email can never
+ * stop every email after it from arriving.
  */
-function isBadMessageError(err: unknown): boolean {
-  for (let e: unknown = err; e && typeof e === 'object'; e = (e as { cause?: unknown }).cause) {
+const OUTAGE_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'ENOSPC', 'EACCES', 'EROFS', 'EIO']);
+export function isOutageError(err: unknown): boolean {
+  for (let e: unknown = err, depth = 0; e && typeof e === 'object' && depth < 10; depth++) {
     const code = (e as { code?: unknown }).code;
-    if (typeof code === 'string' && /^2[23]/.test(code)) return true;
+    if (typeof code === 'string' && (/^(08|40|53|57|58)/.test(code) || OUTAGE_CODES.has(code))) return true;
+    if (e instanceof Error && /connection terminated|timeout exceeded when trying to connect/i.test(e.message))
+      return true;
+    e = (e as { cause?: unknown }).cause;
   }
   return false;
 }
@@ -126,7 +132,7 @@ export class InboundService {
         try {
           outcomes.push(await this.processMessage(box, m));
         } catch (err) {
-          if (!isBadMessageError(err)) throw err;
+          if (isOutageError(err)) throw err;
           const cause = (err as { cause?: { message?: string } }).cause?.message ?? String(err);
           this.log.warn(`${box.address}: skipped message ${m.providerId}: ${cause}`);
           await this.logOutcome(this.db, box.id, m.providerId, 'failed', null, null, cause.slice(0, 500));
